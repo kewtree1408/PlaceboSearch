@@ -8,10 +8,9 @@ class DrugInfo(Item):
     name - название лекарства
     info - вся информация
     """
+    url = Field()
     name = Field()
     info = Field()
-    url = Field()
-
 
 
 class DrugDescription(Item):
@@ -23,6 +22,7 @@ class DrugDescription(Item):
     - побочные действия
     - передозировка
     """
+    url = Field()
     name = Field()
     classification = Field()
     description = Field()
@@ -30,7 +30,6 @@ class DrugDescription(Item):
     contra = Field()
     side = Field()
     overdose = Field()
-    url = Field()
 
 
 class DiseaseDescription(Item):
@@ -40,16 +39,7 @@ class DiseaseDescription(Item):
     - подробное описание
     - лекарства
     """
+    url = Field()
     name = Field()
     description = Field()
     drugs = Field()
-    url = Field()
-
-
-
-class Link(Item):
-    """
-    Пара: название - ссылка
-    """
-    name = Field()
-    url = Field()
