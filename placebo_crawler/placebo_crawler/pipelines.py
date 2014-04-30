@@ -11,26 +11,31 @@ class JsonWriterPipeline(object):
     Записываем в файл текстовые данные и json
     """
     def __init__(self):
-        self.file_txt = codecs.open('items.txt', encoding='utf8', mode='w')
-        self.file_json = codecs.open('items.json', encoding='utf8', mode='w')
+        self.drug_file_txt = codecs.open('items_DRUG.txt', encoding='utf8', mode='aw')
+        self.drug_file_json = codecs.open('items_DRUG.json', encoding='utf8', mode='aw')
+        self.disease_file_txt = codecs.open('items_DISEASE.txt', encoding='utf8', mode='aw')
+        self.disease_file_json = codecs.open('items_DISEASE.json', encoding='utf8', mode='aw')
 
     def process_item(self, item, spider):
-        prefix = ''
-        if isinstance(item, DrugInfo) or isinstance(item, DrugDescription):
-            prefix = 'DRUG'
-        elif isinstance(item, DiseaseDescription):
-            prefix = 'DISEASE'
-
-        line = ''.join(['%s_%s: %s\n'%(prefix,k,item[k]) for k in dict(item)])
+        line = ''.join(['%s: %s\n'%(k,item[k]) for k in dict(item)])
         json_line = json.dumps(dict(item)) + '\n'
-        self.file_txt.write(line)
-        self.file_json.write(json_line)
+        
+        if isinstance(item, DrugInfo) or isinstance(item, DrugDescription):
+            fl_txt = self.drug_file_txt
+            fl_json = self.drug_file_json
+        elif isinstance(item, DiseaseDescription):
+            fl_txt = self.disease_file_txt
+            fl_json = self.disease_file_json
+        
+        fl_txt.write(line)
+        fl_json.write(json_line)
+        
         return item
 
 
 class DuplicatesPipeline(object):
     """
-    Пропускаем дубликаты для описания болезней desiase
+    Пропускаем дубликаты для болезней disease
     """
     def __init__(self):
         self.ids_seen = set()
