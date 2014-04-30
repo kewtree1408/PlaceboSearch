@@ -81,7 +81,7 @@ class DrugsSpider(Spider):
             if "#" not in url:
                 yield Request(url, callback=self.parse_drug)
                 time.sleep(2)
-                break
+                # break
 
     def parse(self, response):
         sel = Selector(response)
@@ -89,7 +89,7 @@ class DrugsSpider(Spider):
         for url in url_letters:
             yield Request(url, callback=self.parse_letter)
             time.sleep(2)
-            break
+            # break
 
 
 class DiseaseSpider(Spider):
@@ -120,7 +120,7 @@ class DiseaseSpider(Spider):
         for url in url_diseases:
             yield Request(url, callback=self.parse_disease)
             time.sleep(2)
-            break
+            # break
 
     def parse(self, response):
         sel = Selector(response)
@@ -129,9 +129,9 @@ class DiseaseSpider(Spider):
         for url in url_letters:
             yield Request(url, callback=self.parse_letter)
             time.sleep(2)
-            i += 1
-            if i>4:
-                break
+            # i += 1
+            # if i>4:
+            #     break
 
 
 
