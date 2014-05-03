@@ -12,7 +12,7 @@ SPIDER_MODULES = ['placebo_crawler.spiders']
 NEWSPIDER_MODULE = 'placebo_crawler.spiders'
 
 ITEM_PIPELINES = {
-    'placebo_crawler.pipelines.JsonWriterPipeline': 800,
+    'placebo_crawler.pipelines.JsonWriterPipeline': 400,
     'placebo_crawler.pipelines.DuplicatesPipeline': 800,
 }
 

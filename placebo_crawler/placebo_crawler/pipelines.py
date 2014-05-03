@@ -5,7 +5,7 @@ import codecs
 import cPickle
 
 from scrapy.exceptions import DropItem
-from items import DiseaseDescription, DrugDescription, DrugInfo
+from items import DiseaseDescription, DrugDescription
 
 
 class JsonWriterPipeline(object):
@@ -15,12 +15,8 @@ class JsonWriterPipeline(object):
     def __init__(self):
         self.drug_file_txt = codecs.open('items_DRUG.txt', encoding='utf8', mode='aw')
         self.drug_file_txt.write("====================================================\n")
-        # self.drug_file_json = codecs.open('items_DRUG.json', encoding='utf8', mode='aw')
-        # self.drug_file_json.write("====================================================\n")
         self.disease_file_txt = codecs.open('items_DISEASE.txt', encoding='utf8', mode='aw')
         self.disease_file_txt.write("====================================================\n")
-        # self.disease_file_json = codecs.open('items_DISEASE.json', encoding='utf8', mode='aw')
-        # self.disease_file_json.write("====================================================\n")
 
         self.drug_pkl = open('items_DRUG.pkl', 'aw')
         self.disease_pkl = open('items_DRUG.pkl', 'aw')
@@ -28,20 +24,16 @@ class JsonWriterPipeline(object):
 
     def process_item(self, item, spider):
         line = ''.join(['%s: %s\n'%(k,item[k]) for k in dict(item)])
-        # json_line = json.dumps(dict(item)) + '\n'
         
-        if isinstance(item, DrugInfo) or isinstance(item, DrugDescription):
+        if isinstance(item, DrugDescription):
             fl_txt = self.drug_file_txt
-            # fl_json = self.drug_file_json
             fl_pkl = self.drug_pkl
         elif isinstance(item, DiseaseDescription):
             fl_txt = self.disease_file_txt
-            # fl_json = self.disease_file_json
             fl_pkl = self.disease_pkl
         
         fl_txt.write(line)
-        # fl_json.write(json_line)
-        cPickle.dump(item,fl_pkl)
+        cPickle.dump(dict(item),fl_pkl)
         
         return item
 
@@ -57,7 +49,7 @@ class DuplicatesPipeline(object):
         if item['url'] in self.ids_seen:
             raise DropItem("Duplicate item found: %s" % item)
         else:
-            self.ids_seen.add(item['id'])
+            self.ids_seen.add(item['url'])
             return item
 
 

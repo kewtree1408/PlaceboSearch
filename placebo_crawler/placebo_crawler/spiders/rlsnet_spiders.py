@@ -5,7 +5,7 @@ from scrapy.contrib.linkextractors.sgml import SgmlLinkExtractor
 from scrapy.selector import Selector
 from scrapy.spider import Spider
 from scrapy.http import Request
-from placebo_crawler.items import DrugDescription, DrugInfo, DiseaseDescription
+from placebo_crawler.items import DrugDescription, DiseaseDescription
 # from scrapy import log
 from html2text import html2text 
 
@@ -48,10 +48,8 @@ class DrugsSpider(Spider):
     def parse_drug(self, response):
         sel = Selector(response)
         drug_name = sel.xpath('//span[@part="rusname"]/text()').extract()[0]
-        context = sel.xpath('//*[@id="tn_content"]').extract()[0]
         # сохраняем всю информацию для индекса
-        time.sleep(1)
-        yield DrugInfo(url=response.url, name=drug_name, info=html2text(context))
+        context = sel.xpath('//*[@id="tn_content"]').extract()[0]
 
         # сохраняем всю информацию для сниппета (пока не делаем, выяснить, нужно ли делать?)
         classification = ''
@@ -72,6 +70,7 @@ class DrugsSpider(Spider):
                                 contra = contra,
                                 side = side,
                                 overdose = overdose,
+                                info=html2text(context),
                             )
 
     def parse_letter(self, response):
@@ -80,7 +79,7 @@ class DrugsSpider(Spider):
         for url in url_drugs:
             if "#" not in url:
                 yield Request(url, callback=self.parse_drug)
-                time.sleep(2)
+                # time.sleep(2)
                 # break
 
     def parse(self, response):
@@ -88,7 +87,7 @@ class DrugsSpider(Spider):
         url_letters = sel.xpath('//div[@class="tn_letters"]/a/@href').extract()
         for url in url_letters:
             yield Request(url, callback=self.parse_letter)
-            time.sleep(2)
+            # time.sleep(2)
             # break
 
 
@@ -119,7 +118,7 @@ class DiseaseSpider(Spider):
         url_diseases = sel.xpath('//ul/li/a/@href').extract()
         for url in url_diseases:
             yield Request(url, callback=self.parse_disease)
-            time.sleep(2)
+            # time.sleep(2)
             # break
 
     def parse(self, response):
@@ -128,7 +127,7 @@ class DiseaseSpider(Spider):
         i = 0
         for url in url_letters:
             yield Request(url, callback=self.parse_letter)
-            time.sleep(2)
+            # time.sleep(2)
             # i += 1
             # if i>4:
             #     break

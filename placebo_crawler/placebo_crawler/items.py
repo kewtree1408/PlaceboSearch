@@ -2,16 +2,6 @@
 
 from scrapy.item import Item, Field
 
-class DrugInfo(Item):
-    """
-    Вся информация на странице (без категорий)
-    name - название лекарства
-    info - вся информация
-    """
-    url = Field()
-    name = Field()
-    info = Field()
-
 
 class DrugDescription(Item):
     """
@@ -21,6 +11,7 @@ class DrugDescription(Item):
     - противопоказания
     - побочные действия
     - передозировка
+    info - вся информация (без категорий)
     """
     url = Field()
     name = Field()
@@ -30,6 +21,7 @@ class DrugDescription(Item):
     contra = Field()
     side = Field()
     overdose = Field()
+    info = Field()
 
 
 class DiseaseDescription(Item):
