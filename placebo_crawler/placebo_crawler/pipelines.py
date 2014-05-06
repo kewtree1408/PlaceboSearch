@@ -19,7 +19,7 @@ class JsonWriterPipeline(object):
         self.disease_file_txt.write("====================================================\n")
 
         self.drug_pkl = open('items_DRUG.pkl', 'aw')
-        self.disease_pkl = open('items_DRUG.pkl', 'aw')
+        self.disease_pkl = open('items_DISEASE.pkl', 'aw')
 
 
     def process_item(self, item, spider):
@@ -33,7 +33,7 @@ class JsonWriterPipeline(object):
             fl_pkl = self.disease_pkl
         
         fl_txt.write(line)
-        cPickle.dump(dict(item),fl_pkl)
+        cPickle.dump(dict(item), fl_pkl)
         
         return item
 
