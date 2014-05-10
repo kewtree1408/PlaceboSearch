@@ -79,7 +79,7 @@ class DrugsSpider(Spider):
         for url in url_drugs:
             if "#" not in url:
                 yield Request(url, callback=self.parse_drug)
-                # time.sleep(2)
+                time.sleep(5)
                 # break
 
     def parse(self, response):
@@ -87,7 +87,7 @@ class DrugsSpider(Spider):
         url_letters = sel.xpath('//div[@class="tn_letters"]/a/@href').extract()
         for url in url_letters:
             yield Request(url, callback=self.parse_letter)
-            # time.sleep(2)
+            time.sleep(5)
             # break
 
 
@@ -118,7 +118,7 @@ class DiseaseSpider(Spider):
         url_diseases = sel.xpath('//ul/li/a/@href').extract()
         for url in url_diseases:
             yield Request(url, callback=self.parse_disease)
-            # time.sleep(2)
+            time.sleep(5)
             # break
 
     def parse(self, response):
@@ -127,17 +127,4 @@ class DiseaseSpider(Spider):
         i = 0
         for url in url_letters:
             yield Request(url, callback=self.parse_letter)
-            # time.sleep(2)
-            # i += 1
-            # if i>4:
-            #     break
-
-
-
-        
-            
-            
-
-        
-            
-            
+            time.sleep(5)
