@@ -35,11 +35,12 @@ fh.setFormatter(formatter)
 logger.addHandler(fh)
 
 
+
 class DocStat1(object):
     def __init__(self, item, freq, posids):
         self.doc_url = item['url'].lstrip('http://www.')
         self.freq = freq
-        self.posids = sorted(posids)
+        self.posids = list(posids)
         self.weight = 0
 
     def __str__(self):
@@ -51,17 +52,18 @@ class DocStat1(object):
 
 
 class DocStat2(object):
-    def __init__(self, item, labels, freq, posids):
+    def __init__(self, item, labels, text, freq, posids):
         self.doc_url = item['url'].lstrip('http://www.')
         self.freq = freq
-        self.posids = posids
+        self.posids = list(posids)
         self.labels = labels
         self.weight = 0
+        self.text = text
 
     def __str__(self):
         posids = ''.join([str(p)+', ' for p in self.posids])
         labels = ''.join([str(l)+', ' for l in self.labels])
-        return u'%s: <%d(%f), [%s], [%s]>' % (self.doc_url, self.freq, self.weight, posids, labels)
+        return u'%s: <%d(%f), [%s], [%s]> <text...%d>' % (self.doc_url, self.freq, self.weight, posids, labels, len(self.text))
 
     def __repr__(self):
         return str(self)
@@ -97,11 +99,11 @@ def is_punctuation(token):
 
 # получаем уникальные токены для текущего документа
 def get_tokens(text):
-    tokens = collections.defaultdict(lambda: (0, list())) # {'token': (freq(int), posids(list))}
+    tokens = collections.defaultdict(lambda: (0, list()))  # {'token': (freq(int), posids(list))}
     pos = 0
     for t in wordpunct_tokenize(text):
+        pos += len(t)
         if not is_punctuation(t):
-            pos += 1
             freq, posids = tokens[t]
             tokens[t] = freq + 1, posids + [pos]
     return tokens
@@ -118,20 +120,20 @@ def get_terms(tokens):
     return terms
 
 
-def update_rindex1(rindex, item, key_name='info'):
-    """
-    @return terms;
-    terms = [
-        term1: [DocStat1_1, DocStat1_2, ..., DocStat1_N],
-        term2: [DocStat1_1, DocStat1_2, ..., DocStat1_M],
-        ...
-    ]
-    """
-    text = item[key_name]
-    tokens = get_tokens(text)
-    terms = get_terms(tokens)
-    for trm in terms:
-        rindex[trm] += [DocStat1(item, *terms[trm])]
+# def update_rindex1(rindex, item, key_name='info'):
+#     """
+#     @return terms;
+#     terms = [
+#         term1: [DocStat1_1, DocStat1_2, ..., DocStat1_N],
+#         term2: [DocStat1_1, DocStat1_2, ..., DocStat1_M],
+#         ...
+#     ]
+#     """
+#     text = item[key_name]
+#     tokens = get_tokens(text)
+#     terms = get_terms(tokens)
+#     for trm in terms:
+#         rindex[trm] += [DocStat1(item, *terms[trm])]
 
 
 def update_rindex2(rindex, item, first_tag, key_name='info'):
@@ -141,7 +143,8 @@ def update_rindex2(rindex, item, first_tag, key_name='info'):
         text = item[tag]
         terms = get_terms(get_tokens(text))
         for trm in terms:
-            rindex[trm] += [DocStat2(item, [first_tag, tag], *terms[trm])]
+            # print text
+            rindex[trm] += [DocStat2(item, [first_tag, tag], text, *terms[trm])]
 
 
 def update_index3(index, item, key_name='info'):
@@ -224,7 +227,7 @@ def get_indexes(ridx_fname, idx_fname):
 #     print res
 
 
-def get_tf_idf(q, ridx):
+def get_tf_idf(q, ridx, labels=None):
     """
     Возвращает список из списков: [
         [tf-idx, [DocStat2_11, DocStat2_21, DocStat2_31, ...]],
@@ -232,6 +235,8 @@ def get_tf_idf(q, ridx):
         ...
     ]
     """
+    BIG_WEIGHT = 10.0
+    labels = [] if labels is None else list(labels)
     terms_q = dict(get_terms(get_tokens(q)))
     q_docstats = []
     N = sum([len(ridx.get(t,[])) for t in terms_q])
@@ -241,6 +246,11 @@ def get_tf_idf(q, ridx):
         idf = log(1.0*N/df) if df != 0 else 0
         for ds in ridx.get(t, []):
             ds.weight = (1.0+log(ds.freq))*idf
+            # учитываем метки
+            for label in labels:
+                if label in ds.labels:
+                    ds.weight += BIG_WEIGHT
+
         q_docstats += sorted([docstat for docstat in ridx.get(t, [])], key=lambda ds: ds.weight)
 
     rank = collections.defaultdict(lambda: [0, list()])
@@ -251,35 +261,83 @@ def get_tf_idf(q, ridx):
     return sorted([rank[d] for d in rank], key=lambda ds: ds[0], reverse=True)
 
 
-def get_similarity(q, idx):
+def get_similarity(q, idx, tf_idf):
+    COUNT_WORDS_IN_TEXT = 100
+    urls_for_sim = set()
+    for info in tf_idf:
+        weight = info[0]
+        ds2_lst = info[1]
+        for ds in ds2_lst:
+            urls_for_sim.add(ds.doc_url)
+
     rank_lm = []
     est = lambda fdist, bins: LidstoneProbDist(fdist, 0.2)
     q_sequence = wordpunct_tokenize(q)
-    for doc_url in idx:
+    for doc_url in urls_for_sim:
         ds = idx[doc_url]
         text = ds.text
         sequence = wordpunct_tokenize(text)
         lm = NgramModel(3, sequence, estimator=est)
         ds.weight = lm.entropy(q_sequence)
+        # if len(ds.text) > COUNT_WORDS_IN_TEXT:
         rank_lm += [ds]
 
     return sorted(rank_lm, key=lambda ds: ds.weight)
 
 
-def finder(q, ridx, idx):
-    get_tf_idf(q, ridx)
-    sim = get_similarity(q, idx)
-    return sim
+def finder(q, ridx, idx, labels):
+    tf_idf = get_tf_idf(q, ridx, labels)
+    # пока не понятно, убираем или оставляем похожесть и как ее учитывать?
+    # sim = get_similarity(q, idx, tf_idf)
+    # print sim
+    return tf_idf
+
+
+def _snippet_by(ds):
+    SIZE_SNIPPET = 80
+    if not isinstance(ds.posids, list):
+        ds.posids = list(ds.posids)
+    pos1 = ds.posids[0]
+    print ds
+    text = ds.text
+    pos = 0
+    begin_pos = 0
+    count_spaces = 0
+    for t in wordpunct_tokenize(text):
+        if text[pos].isupper():
+            begin_pos = pos
+            count_spaces = text[:pos].count(' ') + text[:pos].count('\n') +text[:pos].count('\t')
+        pos += len(t)
+        if pos == pos1:
+            print "begin = ", begin_pos
+            text_without_endspaces = text[begin_pos:pos+count_spaces+SIZE_SNIPPET].strip()
+            text_without_lf = text_without_endspaces.replace('\n', '; ')
+            snippet = text_without_lf + "..."
+            return snippet
+
+
+def get_snippet(lst_result):
+    snippet = []
+    for res in lst_result:
+        weight = res[0]
+        lst_ds = res[1]
+        print "lst=", lst_ds
+        ds = lst_ds[0]
+        yield _snippet_by(ds)
 
 
 def main():
     rindex, index = get_indexes('rindex.pkl', 'index.pkl')
-    query = u"острая боль в горле"
+    query = u"сердечный спазм"
+    # query = u"дистрофия слизистой"
 
-    # Выясняем, насколько наш запрос соответствует
-    res = finder(query, rindex, index)
-
+    labels = ['drug', 'overdose']
+    # Выясняем, насколько наш запрос соответствует документу
+    res = finder(query, rindex, index, labels)
     print res
+    for s in get_snippet(res):
+        print s
+    # print res_from_idx
 
 
 
