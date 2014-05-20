@@ -23,7 +23,16 @@
     </form>
 
     {% for answer in answers %}
-        <div> {{ answer }} </div>
+        <div>
+            <ul>
+                <li>{{ answer.name }}</li>
+                <li> <a href="http://www.{{ answer.url }}">{{ answer.url }}</a> </li>
+                <li>{{ answer.shorter }}</li>
+                <li>{{ answer.labels }}</li>
+            </ul>
+        </div>
+        <hr>
+
     {% endfor %}
 
     {% if answers|length <= 0 %}

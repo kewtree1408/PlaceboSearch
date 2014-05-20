@@ -6,6 +6,7 @@ import hashlib
 import string
 import collections
 import logging
+import simplejson
 
 from placebo_crawler.items import DrugDescription, DiseaseDescription
 
@@ -67,14 +68,6 @@ class DocStat2(object):
 
     def __repr__(self):
         return str(self)
-
-    # def __qt__(self, ds):
-    #     if self.weight > ds.weight:
-    #         return self
-    #     return ds
-    #
-    # def __lt__(self, ds):
-    #     return not self.__qt__(ds)
 
 
 class DocStat3(object):
@@ -285,7 +278,8 @@ def get_similarity(q, idx, tf_idf):
     return sorted(rank_lm, key=lambda ds: ds.weight)
 
 
-def finder(q, ridx, idx, labels):
+def finder(q, labels=None):
+    ridx, inx = get_indexes('rindex.pkl', 'index.pkl')
     tf_idf = get_tf_idf(q, ridx, labels)
     # пока не понятно, убираем или оставляем похожесть и как ее учитывать?
     # sim = get_similarity(q, idx, tf_idf)
@@ -293,7 +287,7 @@ def finder(q, ridx, idx, labels):
     return tf_idf
 
 
-def _snippet_by(ds):
+def snippet_by(ds):
     SIZE_SNIPPET = 80
     if not isinstance(ds.posids, list):
         ds.posids = list(ds.posids)
@@ -317,24 +311,35 @@ def _snippet_by(ds):
 
 
 def get_snippet(lst_result):
+    for res in lst_result:
+        weight = res[0]
+        lst_ds = res[1]
+        ds = lst_ds[0]
+        yield snippet_by(ds)
+
+
+def get_lst_snippet(lst_result):
     snippet = []
     for res in lst_result:
         weight = res[0]
         lst_ds = res[1]
-        print "lst=", lst_ds
         ds = lst_ds[0]
-        yield _snippet_by(ds)
+        snippet.append({'url': ds.doc_url,
+                        'labels': ds.labels,
+                        'shorter': snippet_by(ds),
+                        'name': u'Пока нет'})
+    return snippet
 
 
 def main():
-    rindex, index = get_indexes('rindex.pkl', 'index.pkl')
     query = u"сердечный спазм"
     # query = u"дистрофия слизистой"
 
     labels = ['drug', 'overdose']
     # Выясняем, насколько наш запрос соответствует документу
-    res = finder(query, rindex, index, labels)
-    print res
+    # res = finder(query, labels)
+    res = finder(query)
+    print str(res[0][0])
     for s in get_snippet(res):
         print s
     # print res_from_idx

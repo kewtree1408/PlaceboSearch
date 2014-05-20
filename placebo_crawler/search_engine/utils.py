@@ -1,11 +1,7 @@
-#! /usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from flask import Flask, Blueprint, render_template, jsonify, redirect, url_for, current_app, flash, request
-
+from flask import render_template, jsonify, redirect, url_for, current_app, flash, request
 import pymongo
-
-search = Flask(__name__, static_folder='static', template_folder='templates')
 
 def append_page_range_custom(left, cnt, pages, current, link_class, current_link_class, link, link_first=None):
     for i in xrange(left, left + cnt):
@@ -65,42 +61,3 @@ def build_pager_big(pages_count, current_page, maxwidth=11, prewidth=2, postwidt
     return pages
 
 
-@search.route('/')
-def index():
-    query = request.args.get("q", "").strip().lower()
-    page = int(request.args.get("p", "1"))
-    if page < 1:
-        page = 1
-    total = 1000 #current_app.dbc.prepared_collection.find(where).count()
-    pages = total / 15 + (1 if total % 15 else 0)
-    # cursor = current_app.dbc.prepared_collection.find(where).skip((page - 1) * 15).limit(15)
-    # domainlist = []
-    # for card in cursor:
-    #     addr, addresses = u'', []
-    #     phone = ''
-    #     if 'addresses' in card and len(card['addresses']):
-    #         if len(card['addresses']) == 1:
-    #             addr = card['addresses'][0]['address']
-    #             phone = card['addresses'][0]['phone']
-    #             addresses.append((card['addresses'][0]['address'], card['addresses'][0]['is_head']))
-    #         else:
-    #             for address in card['addresses']:
-    #                 addresses.append((address['address'], address['is_head']))
-    #                 if address['is_head']:
-    #                     addr = address['address']
-    #                     phone = address['phone']
-    #             if not addr:
-    #                 addr = card['addresses'][0]['address']
-    #                 phone = card['addresses'][0]['phone']
-    #     domainlist.append((card['domain'], card['title'], card['url'], addr, phone, addresses, is_black))
-    answers = []
-    if query:
-        answers = [str(i) for i in range(0, 15)]
-    pager = build_pager_big(pages, page, 17)
-    return render_template('index.html', page=page, pages=pages, pager=pager,
-                           answers=answers, query=query, found=total)
-
-
-if __name__ == "__main__":
-    search.run(host='0.0.0.0', port='8007')
-    # search.debug = True
