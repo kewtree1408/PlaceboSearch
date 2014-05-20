@@ -1,0 +1,37 @@
+{%- macro pager(pager) -%}
+    <p>Всего: {{pager.total}}</p>
+    {% if pager.total > 0 %}
+        <div class="pagination">
+            <ul>
+              {% for el in pager.pages %}
+              <li {{ el.class|safe }}><a href="{{ el.link|safe }}">{{ el.value|safe }}</a></li>
+              {% endfor %}
+            </ul>
+        </div>
+    {% endif %}
+{%- endmacro -%}
+
+{% macro render_pager(page, pages, pager, total_message) -%}
+    <div class="pagination pagination-small">
+        <ul>
+            {% if page == 1 %}
+                <li class="disabled"><a href="#">&laquo;</a></li>
+            {% else %}
+                <li>{{ caller(page - 1, "&laquo;") }}</li>
+            {% endif %}
+            {% for link, classes, num in pager %}
+                {% if link == "..." %}
+                    <li class="{{ classes }}"><span>...</span></li>
+                {% else %}
+                    <li class="{{ classes }}">{{ caller(num, num) }}</li>
+                {% endif %}
+            {% endfor %}
+            {% if page == pages %}
+                <li class="disabled"><a href="#">&raquo;</a></li>
+            {% else %}
+                <li>{{ caller(page + 1, "&raquo;") }}</li>
+            {% endif %}
+        </ul>
+        <div class="pull-right" style="margin-left: 20px;"><span>{{ total_message }}</span></div>
+    </div>
+{%- endmacro %}
