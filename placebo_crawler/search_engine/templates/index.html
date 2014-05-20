@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% macro get_url_for_page(page_num) -%}
+    {% if query != "" %}
+        {{ url_for("index", p=page_num, q=query, fm=fm) }}
+    {% else %}
+        {% if page_num <= 1 %}
+            {{ url_for("index") }}
+        {% else %}
+            {{ url_for("index", p=page_num) }}
+        {% endif %}
+    {% endif %}
+{%- endmacro %}
+
+
+{% block content %}
+
+    <form action="{{ url_for('index') }}" method="GET" class="form-search">
+        <div class="input-append" style="padding-left: 20px">
+            <input id="searchbox" name="q" type="text" class="input-large search-query" value="{{ query }}">
+            <button type="submit" class="btn">Найти</button>
+        </div>
+    </form>
+
+    {% for answer in answers %}
+        <div> {{ answer }} </div>
+    {% endfor %}
+
+    {% if answers|length <= 0 %}
+        {% if query != "" %}
+            <div class="alert alert-info">Ничего не найдено</div>
+        {% endif %}
+    {% else %}
+        {% call(num, link) hlp.render_pager(page, pages, pager, "Всего найдено " + found|string + " ссылок.") %}
+            <a href="{{ get_url_for_page(num) }}">{{ link|string|safe }}</a>
+        {% endcall %}
+    {% endif %}
+
+{% endblock %}

@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="ru">
+    <head>
+        <meta charset="utf-8">
+        <title>Поиск лекарств</title>
+        {% import 'helpers.html' as hlp %}
+        <link href="/static/css/bootstrap.css" rel="stylesheet">
+
+        {% block extrahead %}
+        {% endblock %}
+    </head>
+
+    <body>
+        {% block navbar %}
+        <div class="navbar navbar-static-top">
+            <div class="navbar-inner">
+                {% block nav %}
+                    <a class="brand" href="/">PlaceboSearch</a>
+                {% endblock %}
+            </div>
+        </div>
+        {% endblock %}
+
+        <div class="container">
+            <p></p>
+
+            {% block content %}
+            {% endblock %}
+        </div>
+
+        <script src="/static/js/jquery-1.8.2.js"></script>
+        <script src="/static/js/jquery-1.8.2.min.js"></script>
+        <script src="/static/js/bootstrap.js"></script>
+        <script src="/static/js/bootstrap.min.js"></script>
+
+        {% block extrascript %}
+        {% endblock %}
+    </body>
+</html>
