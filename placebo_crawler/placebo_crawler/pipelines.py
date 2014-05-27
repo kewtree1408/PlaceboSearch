@@ -23,7 +23,7 @@ class JsonWriterPipeline(object):
 
 
     def process_item(self, item, spider):
-        line = ''.join(['%s: %s\n'%(k,item[k]) for k in dict(item)])
+        line = ''.join(['%s: %s\n' % (k, item[k]) for k in dict(item)])
         
         if isinstance(item, DrugDescription):
             fl_txt = self.drug_file_txt
