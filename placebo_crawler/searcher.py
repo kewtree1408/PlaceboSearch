@@ -14,6 +14,8 @@ from nltk import wordpunct_tokenize
 from nltk.stem.snowball import RussianStemmer
 from nltk.probability import LidstoneProbDist
 from nltk.model.ngram import NgramModel
+from pymongo import MongoClient
+
 
 from pprint import pprint
 from math import log
@@ -332,19 +334,16 @@ def get_lst_snippet(lst_result):
 
 
 def main():
-    query = u"сердечный спазм"
-    # query = u"дистрофия слизистой"
-
-    labels = ['drug', 'overdose']
+    # query = u"сердечный спазм"
+    # labels = ['drug', 'overdose']
     # Выясняем, насколько наш запрос соответствует документу
-    # res = finder(query, labels)
-    res = finder(query)
-    print str(res[0][0])
-    for s in get_snippet(res):
-        print s
-    # print res_from_idx
+    # finder(query)
 
-
+    get_indexes('rindex.pkl', 'index.pkl')
+    # при обновлении индекса, очищаем кеш
+    dbconnection = MongoClient('localhost', 27017)
+    db = dbconnection['placebo']
+    db['queries'].remove()
 
 
 
