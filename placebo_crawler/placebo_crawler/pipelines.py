@@ -13,13 +13,13 @@ class JsonWriterPipeline(object):
     Записываем в файл текстовые данные и pkl
     """
     def __init__(self):
-        self.drug_file_txt = codecs.open('items_DRUG.txt', encoding='utf8', mode='aw')
+        self.drug_file_txt = codecs.open('items_DRUG.txt', encoding='utf8', mode='a')
         self.drug_file_txt.write("====================================================\n")
-        self.disease_file_txt = codecs.open('items_DISEASE.txt', encoding='utf8', mode='aw')
+        self.disease_file_txt = codecs.open('items_DISEASE.txt', encoding='utf8', mode='a')
         self.disease_file_txt.write("====================================================\n")
 
-        self.drug_pkl = open('items_DRUG.pkl', 'aw')
-        self.disease_pkl = open('items_DISEASE.pkl', 'aw')
+        self.drug_pkl = open('items_DRUG.pkl', 'a')
+        self.disease_pkl = open('items_DISEASE.pkl', 'a')
 
 
     def process_item(self, item, spider):
