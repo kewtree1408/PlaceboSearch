@@ -20,19 +20,13 @@ from pymongo import MongoClient
 from pprint import pprint
 from math import log
 
-# Делаем пока 2 индекса:
-# 1. Стандартный, как в лабе. Нужен для подсчета tf-idf
-# 2. С метками. Если вдруг в запросе присутсвует одно из ключевых слов-меток, то ищем по 2му индексу
-# 3. (если получится). Стром n-грамму. Будем смотреть соответсвие запроса заданному закументу.
-# Для каждого документа будет соответсвующая циферка. Этот момент продумать
-
 
 rus_stemmer = RussianStemmer()
 
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
 formatter = logging.Formatter(u'%(asctime)s - %(message)s')
-fh = logging.FileHandler('stats_rindex1.txt')
+fh = logging.FileHandler('stats_rindex.txt')
 fh.setLevel(logging.DEBUG)
 fh.setFormatter(formatter)
 logger.addHandler(fh)
@@ -62,6 +56,7 @@ class DocStat2(object):
         self.labels = labels
         self.weight = 0
         self.text = text
+        self.title = item['name']
 
     def __str__(self):
         posids = ''.join([str(p)+', ' for p in self.posids])
@@ -97,8 +92,9 @@ def get_tokens(text):
     tokens = collections.defaultdict(lambda: (0, list()))  # {'token': (freq(int), posids(list))}
     pos = 0
     for t in wordpunct_tokenize(text):
-        pos += len(t)
         if not is_punctuation(t):
+            t_pos = text.find(t, pos)
+            pos = t_pos if t_pos != -1 else pos
             freq, posids = tokens[t]
             tokens[t] = freq + 1, posids + [pos]
     return tokens
@@ -106,29 +102,13 @@ def get_tokens(text):
 
 # получаем уникальные термы для текущего документа
 def get_terms(tokens):
-    terms = collections.defaultdict(lambda: (0, set())) # {'term': (freq(int), posids(list))}
+    terms = collections.defaultdict(lambda: (0, list())) # {'term': (freq(int), posids(list))}
     for t in tokens:
         term = rus_stemmer.stem(t)
         freq, posids = terms[term]
         init_freq, init_posids = tokens[t]
-        terms[term] = init_freq + freq, posids | set(init_posids)
+        terms[term] = init_freq + freq, sorted(init_posids + posids)
     return terms
-
-
-# def update_rindex1(rindex, item, key_name='info'):
-#     """
-#     @return terms;
-#     terms = [
-#         term1: [DocStat1_1, DocStat1_2, ..., DocStat1_N],
-#         term2: [DocStat1_1, DocStat1_2, ..., DocStat1_M],
-#         ...
-#     ]
-#     """
-#     text = item[key_name]
-#     tokens = get_tokens(text)
-#     terms = get_terms(tokens)
-#     for trm in terms:
-#         rindex[trm] += [DocStat1(item, *terms[trm])]
 
 
 def update_rindex2(rindex, item, first_tag, key_name='info'):
@@ -157,25 +137,23 @@ def update_indexes(rindex1, rindex2, index3, item, main_tag):
         ...
     }
     """
+    key_value = ''
     if main_tag == 'drug':
         key_value = 'info'
     elif main_tag == 'disease':
         key_value = 'description'
-    # update_rindex1(rindex1, item)
 
     update_rindex2(rindex2, item, main_tag, key_value)
     update_index3(index3, item, key_value)
 
 
 def build_rindex():
-    main_tag = 'DRUG'
-    fname = "items_DRUG.pkl"
     rindex1 = collections.defaultdict(lambda: list())
     rindex2 = collections.defaultdict(lambda: list())
     index3 = dict()
 
     for main_tag in ['DRUG', 'DISEASE']:
-        fname = "items_%s.pkl"%main_tag
+        fname = "items_%s.pkl" % main_tag
         with open(fname, 'rb') as bf:
             while bf:
                 try:
@@ -187,10 +165,9 @@ def build_rindex():
                 except Exception as ex:
                     print ex
                     raise
-                    continue
 
     for t, ds in sorted(rindex2.items()):
-        print u"term = %s, ds = %s"%(t, str(ds))
+        # print u"term = %s, ds = %s"%(t, str(ds))
         logger.debug(u"term = %s, ds = %s", t, str(ds))
 
     return dict(rindex2), dict(index3)
@@ -236,6 +213,8 @@ def get_tf_idf(q, ridx, labels=None):
     q_docstats = []
     N = sum([len(ridx.get(t,[])) for t in terms_q])
     print N
+    # TODO: нужно сделать схему tf-idf для термов в запросе
+    # TODO: Сделать нормализацию по векторам. Считать косунус угла между нормированными векторами
     for t in terms_q:
         df = len(ridx.get(t, []))
         idf = log(1.0*N/df) if df != 0 else 0
@@ -294,22 +273,25 @@ def snippet_by(ds):
     if not isinstance(ds.posids, list):
         ds.posids = list(ds.posids)
     pos1 = ds.posids[0]
-    print ds
     text = ds.text
     pos = 0
-    begin_pos = 0
-    count_spaces = 0
+    begin_pos = pos1
+    second_pos = 0
+
     for t in wordpunct_tokenize(text):
         if text[pos].isupper():
             begin_pos = pos
-            count_spaces = text[:pos].count(' ') + text[:pos].count('\n') +text[:pos].count('\t')
-        pos += len(t)
-        if pos == pos1:
-            print "begin = ", begin_pos
-            text_without_endspaces = text[begin_pos:pos+count_spaces+SIZE_SNIPPET].strip()
+        if is_punctuation(text[pos]):
+            second_pos = pos
+        if pos - begin_pos > SIZE_SNIPPET/2:
+            begin_pos = second_pos
+        if pos < pos1 and pos - begin_pos < SIZE_SNIPPET/2:
+            # space_pos = text.rfind(' ', 0, begin_pos-1)
+            text_without_endspaces = text[begin_pos:pos1] + '$' + text[pos1:pos1+SIZE_SNIPPET].strip()
             text_without_lf = text_without_endspaces.replace('\n', '; ')
             snippet = text_without_lf + "..."
             return snippet
+        pos += 1
 
 
 def get_snippet(lst_result):
@@ -320,16 +302,30 @@ def get_snippet(lst_result):
         yield snippet_by(ds)
 
 
+TRANSLATE_LBLs = {
+    'description': u'описание',
+    'drugs': u'лекарство',
+    'drug': u'лекарство',
+    'classification': u'классификация',
+    'usage': u'показания',
+    'contra': u'противопоказания',
+    'side': u'побочные действия',
+    'overdose': u'передозировка',
+    'name': u'название',
+}
+
 def get_lst_snippet(lst_result):
     snippet = []
     for res in lst_result:
         weight = res[0]
         lst_ds = res[1]
         ds = lst_ds[0]
+        labels = [TRANSLATE_LBLs.get(l.strip(), u'') for l in ds.labels]
         snippet.append({'url': ds.doc_url,
-                        'labels': ds.labels,
+                        'domain': ds.doc_url.split('/')[0],
+                        'labels': labels,
                         'shorter': snippet_by(ds),
-                        'name': u'Пока нет'})
+                        'title': ds.title})
     return snippet
 
 
@@ -339,7 +335,8 @@ def main():
     # Выясняем, насколько наш запрос соответствует документу
     # finder(query)
 
-    get_indexes('rindex.pkl', 'index.pkl')
+    res = get_indexes('rindex.pkl', 'index.pkl')
+    print res
     # при обновлении индекса, очищаем кеш
     dbconnection = MongoClient('localhost', 27017)
     db = dbconnection['placebo']

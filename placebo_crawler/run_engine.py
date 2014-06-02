@@ -27,12 +27,9 @@ def index():
         page = int(request.args.get("p", "1"))
         if page < 1:
             page = 1
-
-        drugs = request.args.get("drugs", "")
-        # disease = request.args.get("disease", "")
         cursor = search.last_queries.find({query: {"$exists": "true"}})
-        labels = [drugs]
         n_p = 10
+        labels = [] # здесь будет реакция на слово-тег в запросе
         answers = []
         snippets = []
         if query:
@@ -47,8 +44,7 @@ def index():
         pages = total / n_p + (1 if total % n_p else 0)
         pager = build_pager_big(pages, page, n_p+2)
         return render_template('index.html', page=page, pages=pages, pager=pager,
-                               answers=answers, query=query, found=total,
-                               drugs=drugs)
+                               answers=answers, query=query, found=total)
     except Exception as ex:
         return jsonify(error=traceback.format_exc())
 

@@ -31,7 +31,7 @@ class DrugsSpider(Spider):
 
     def parse_drug(self, response):
         sel = Selector(response)
-        drug_name = sel.xpath('//h2[@class="b-serp__title"]/text()').extract()[0]
+        drug_name = ''.join(sel.xpath('//h2[@class="b-serp__title"]/text()').extract()[0])
         # сохраняем всю информацию для индекса
         context = sel.xpath('//div[@class="body article"]').extract()[0]
 
@@ -76,7 +76,11 @@ class DrugsSpider(Spider):
     def parse(self, response):
         sel = Selector(response)
         url_letters = sel.xpath('//div[@class="b-book-info__index"]/a/@href').extract()
+        p = 0
         for url in url_letters:
             root_url = 'http://slovari.yandex.ru' + url
             print root_url
             yield Request(root_url, callback=self.parse_letter)
+            p += 1
+            if p > 2:
+                break

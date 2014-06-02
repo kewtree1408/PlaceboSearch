@@ -25,10 +25,15 @@
     {% for answer in answers %}
         <div>
             <ul>
-                <li>{{ answer.name }}</li>
-                <li> <a href="http://www.{{ answer.url }}">{{ answer.url }}</a> </li>
-                <li>{{ answer.shorter }}</li>
-                <li>{{ answer.labels }}</li>
+                <h4> <a href="http://www.{{ answer.url }}">{{ answer.title }}</a></h4>
+                <div style="font-size: 12px"> <a href="http://www.{{ answer.domain }}">{{ answer.domain }}</a></div>
+                <div>{{ answer.shorter }}</div>
+                <div >
+                    {% for label in answer.labels %}
+                        <em style="padding-right: 10px; font-size: 12px"> {{ label }} </em>
+                    {% endfor %}
+                </div>
+
             </ul>
         </div>
         <hr>
