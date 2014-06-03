@@ -54,4 +54,4 @@ if __name__ == "__main__":
     search.dbconnection = MongoClient('localhost', 27017)
     search.db = search.dbconnection['placebo']
     search.last_queries = search.db['queries']
-    search.run(host=host, port=port) #add debug
+    search.run(host=host, port=port) # add debug

@@ -9,6 +9,7 @@ import logging
 import simplejson
 
 from placebo_crawler.items import DrugDescription, DiseaseDescription
+from heapq import heappush, heappop, nlargest
 
 from nltk import wordpunct_tokenize
 from nltk.stem.snowball import RussianStemmer
@@ -208,6 +209,7 @@ def get_tf_idf(q, ridx, labels=None):
     ]
     """
     BIG_WEIGHT = 10.0
+    MIN_COUNT_RESULTS = 50
     labels = [] if labels is None else list(labels)
     terms_q = dict(get_terms(get_tokens(q)))
     q_docstats = []
@@ -215,6 +217,7 @@ def get_tf_idf(q, ridx, labels=None):
     print N
     # TODO: нужно сделать схему tf-idf для термов в запросе
     # TODO: Сделать нормализацию по векторам. Считать косунус угла между нормированными векторами
+    heap_docstats = []
     for t in terms_q:
         df = len(ridx.get(t, []))
         idf = log(1.0*N/df) if df != 0 else 0
@@ -224,15 +227,19 @@ def get_tf_idf(q, ridx, labels=None):
             for label in labels:
                 if label in ds.labels:
                     ds.weight += BIG_WEIGHT
+            if len(heap_docstats) < MIN_COUNT_RESULTS:
+                heappush(heap_docstats, (ds.weight, ds))
+            elif ds.weight > BIG_WEIGHT/4:
+                heappush(heap_docstats, (ds.weight, ds))
 
-        q_docstats += sorted([docstat for docstat in ridx.get(t, [])], key=lambda ds: ds.weight)
 
     rank = collections.defaultdict(lambda: [0, list()])
-    for ds in q_docstats:
-        rank[ds.doc_url][0] += ds.weight
+    while heap_docstats:
+        w, ds = heappop(heap_docstats)
+        rank[ds.doc_url][0] += w
         rank[ds.doc_url][1] += [ds]
-
     return sorted([rank[d] for d in rank], key=lambda ds: ds[0], reverse=True)
+    # return nlargest(1000, heap_docstats)
 
 
 def get_similarity(q, idx, tf_idf):
@@ -314,6 +321,7 @@ TRANSLATE_LBLs = {
     'name': u'название',
 }
 
+
 def get_lst_snippet(lst_result):
     snippet = []
     for res in lst_result:
@@ -330,17 +338,20 @@ def get_lst_snippet(lst_result):
 
 
 def main():
-    # query = u"сердечный спазм"
-    # labels = ['drug', 'overdose']
-    # Выясняем, насколько наш запрос соответствует документу
-    # finder(query)
-
-    res = get_indexes('rindex.pkl', 'index.pkl')
-    print res
     # при обновлении индекса, очищаем кеш
     dbconnection = MongoClient('localhost', 27017)
     db = dbconnection['placebo']
     db['queries'].remove()
+
+    query = u"ПеЧень Почки"
+    # labels = ['drug', 'overdose']
+    # Выясняем, насколько наш запрос соответствует документу
+    f = get_lst_snippet(finder(query))
+    print f
+    return 0
+
+    res = get_indexes('rindex.pkl', 'index.pkl')
+    print res
 
 
 
