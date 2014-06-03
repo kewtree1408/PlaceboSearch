@@ -73,26 +73,6 @@ def index():
         page = 1
     total = 1000 #current_app.dbc.prepared_collection.find(where).count()
     pages = total / 15 + (1 if total % 15 else 0)
-    # cursor = current_app.dbc.prepared_collection.find(where).skip((page - 1) * 15).limit(15)
-    # domainlist = []
-    # for card in cursor:
-    #     addr, addresses = u'', []
-    #     phone = ''
-    #     if 'addresses' in card and len(card['addresses']):
-    #         if len(card['addresses']) == 1:
-    #             addr = card['addresses'][0]['address']
-    #             phone = card['addresses'][0]['phone']
-    #             addresses.append((card['addresses'][0]['address'], card['addresses'][0]['is_head']))
-    #         else:
-    #             for address in card['addresses']:
-    #                 addresses.append((address['address'], address['is_head']))
-    #                 if address['is_head']:
-    #                     addr = address['address']
-    #                     phone = address['phone']
-    #             if not addr:
-    #                 addr = card['addresses'][0]['address']
-    #                 phone = card['addresses'][0]['phone']
-    #     domainlist.append((card['domain'], card['title'], card['url'], addr, phone, addresses, is_black))
     answers = []
     if query:
         answers = [str(i) for i in range(0, 15)]

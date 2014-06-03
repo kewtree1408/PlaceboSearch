@@ -18,7 +18,7 @@ from pymongo import MongoClient
 
 
 from pprint import pprint
-from math import log
+from math import log, sqrt
 
 
 rus_stemmer = RussianStemmer()
@@ -65,6 +65,11 @@ class DocStat2(object):
 
     def __repr__(self):
         return str(self)
+
+    def __equal__(self, ds):
+        if self.doc_url == ds.doc_url:
+            return True
+        return False
 
 
 class DocStat3(object):
@@ -199,6 +204,20 @@ def get_indexes(ridx_fname, idx_fname):
 #     print res
 
 
+def get_term_tf_idf(terms_q):
+    """
+    tf-idf для терминов
+    """
+    t_w = dict()
+    N = len(terms_q)
+    for t in terms_q:
+        df = terms_q[t][0]
+        idf = log(1.0*N/df)
+        w = (1.0+log(df))*idf
+        t_w[t] = w
+    return t_w
+
+
 def get_tf_idf(q, ridx, labels=None):
     """
     Возвращает список из списков: [
@@ -213,19 +232,25 @@ def get_tf_idf(q, ridx, labels=None):
     q_docstats = []
     N = sum([len(ridx.get(t,[])) for t in terms_q])
     print N
-    # TODO: нужно сделать схему tf-idf для термов в запросе
-    # TODO: Сделать нормализацию по векторам. Считать косунус угла между нормированными векторами
+    # схема tf-idf для терминов
+    term_tf_idf = get_term_tf_idf(terms_q)
+    # увеличивает вес
+    doci_norm = collections.defaultdict(lambda: list())
     for t in terms_q:
-        df = len(ridx.get(t, []))
+        all_terms_ridx = ridx.get(t, [])
+        df = len(all_terms_ridx)
         idf = log(1.0*N/df) if df != 0 else 0
-        for ds in ridx.get(t, []):
+        for ds in all_terms_ridx:
             ds.weight = (1.0+log(ds.freq))*idf
-            # учитываем метки
+            #  учитываем метки
             for label in labels:
                 if label in ds.labels:
                     ds.weight += BIG_WEIGHT
-
-        q_docstats += sorted([docstat for docstat in ridx.get(t, [])], key=lambda ds: ds.weight)
+            # смотрим на набор документов для терминов из запроса и выясняем,
+            # какой из документов соответствует бОльшему кол-ву слов из запроса
+            ds.weight *= term_tf_idf[t]
+            print ds.weight, ds.doc_url
+        q_docstats += sorted([docstat for docstat in all_terms_ridx], key=lambda ds: ds.weight)
 
     rank = collections.defaultdict(lambda: [0, list()])
     for ds in q_docstats:
@@ -345,4 +370,12 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    # main()
+    query = u"самое самое первое в мире лекарство в мире"
+    terms_q = dict(get_terms(get_tokens(query)))
+    r = get_term_tf_idf(terms_q)
+    for t in r:
+        print t, r[t]
+
+    query = u"сердечный спазм"
+    finder(query)
