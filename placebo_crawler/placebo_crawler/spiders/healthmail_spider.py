@@ -26,38 +26,43 @@ class DrugsSpider(Spider):
 
 
     def p_between_id(self, n, sel):
-        lineN = '//div[@class="text margin_bottom_30 js-text_adaptive"]//h2[%s]/following-sibling::p/text()'%str(n)
+        lineN = '//div[@class="text margin_bottom_30 js-text_widget"]//h2[%s]/following-sibling::*/text()'%str(n)
         N = sel.xpath(lineN).extract()
-        lineN_1 = '//div[@class="text margin_bottom_30 js-text_adaptive"]//h2[%s]/preceding-sibling::p/text()'%str(n+1)
+        lineN_1 = '//div[@class="text margin_bottom_30 js-text_widget"]//h2[%s]/preceding-sibling::*/text()'%str(n+1)
         N_1 = sel.xpath(lineN_1).extract()
         return [text for text in (set(N) & set(N_1))]
 
 
-    def parse_drug(self, catalog_rubric_name, catalog_item_name, response):
+    def parse_drug(self, response):
         sel = Selector(response)
-        drug_name = sel.xpath('//h1[@class="page-info__title"]/text()').extract[0]
+        drug_name = sel.xpath('//h1[@class="page-info__title"]/text()').extract()[0]
 
         context = sel.xpath('//div[@class="column__air"]').extract()[0]
 
         classification = ''
 
-        all_subheads = sel.xpath('//div[@class="text margin_bottom_30 js-text_adaptive"]//h2/text()').extract()
-
-        print(all_subheads)
+        all_subheads = sel.xpath('//div[@class="text margin_bottom_30 js-text_widget"]//h2/text()').extract()
+        #print(all_subheads)
         description, usage, contra, side, overdose = '', '', '', '', ''
         for i, subhead in enumerate(all_subheads):
-            print(i, subhead)
+            #print(i, subhead)
+            print("\n" + str(i) + "\n")
             n = i+1
 
-            if subhead == u"Форма выпуска, состав и упаковка":
+            #if subhead == u"Форма выпуска, состав и упаковка":
+            if u"Форма выпуска, состав и упаковка" in subhead:
                 description = ''.join(self.p_between_id(n, sel))
-            elif subhead == u"Дозировка" or subhead == u"Показания":
+            #elif subhead == u"Дозировка" or subhead == u"Показания":
+            elif u"Дозировка" in subhead or u"Показания" in subhead:
                 usage = ''.join(self.p_between_id(n, sel))
-            elif subhead == u"Противопоказания":
+            #elif subhead == u"Противопоказания":
+            elif u"Противопоказания" in subhead:
                 contra = ''.join(self.p_between_id(n, sel))
-            elif subhead == u"Побочные действия":
+            #elif subhead == u"Побочные действия":
+            elif u"Побочные действия" in subhead:
                 side = ''.join(self.p_between_id(n, sel))
-            elif subhead == u"Передозировка":
+            #elif subhead == u"Передозировка":
+            elif u"Передозировка" in subhead:
                 overdose = ''.join(self.p_between_id(n, sel))
             yield DrugDescription(  url=response.url,
                                 name=drug_name,
@@ -70,32 +75,33 @@ class DrugsSpider(Spider):
                                 info=html2text(context),
                             )
 
-    def parse_list_of_drugs(self, catalog_rubric_name, catalog_item_name, response):
+    def parse_list_of_drugs(self, response):
         sel = Selector(response)
-        url_drugs = name_domain + sel.xpath('//a[@class="entry__link link-holder"]//@href').extract()
+        url_drugs = sel.xpath('//a[@class="entry__link link-holder"]//@href').extract() # Вытаскиваем все ссылки с текущей страницы
+        #print(url_drugs)
         for url in url_drugs:
-            root_url = name_domain + url
-            print(root_url)
-            yield Request(root_url, callback=self.parse_drug)
+            absolutely_url_drug = self.name_domain + url
+            yield Request(absolutely_url_drug, callback=self.parse_drug)
+
+
+
+    def parse_setof_pages(self, response):
+        sel = Selector(response)
+        all_another_pages = sel.xpath('//div[@class="paging"]//a[@class="paging__item"]/@href').extract() # Проверяем есть ли другие страницы
+        #print(response.url)
+        all_another_pages.append(response.url)
+        for page_link in all_another_pages:
+            absolutely_page_link = page_link
+            if '?' in page_link:
+                absolutely_page_link = self.name_domain + page_link
+            yield Request(absolutely_page_link, callback=self.parse_list_of_drugs)
 
     def parse(self, response):
         sel = Selector(response)
-
         print("\n\nstart\n\n")#
+        rubric_links = sel.xpath('//div[@class="hidden hidden_small"]//div[@class="catalog__rubric"]//@href').extract() # получаем локальные ссылки на тематику к которым принадлежат лекарства (91шт)
+        for link in rubric_links:
+            catalog_item_link = self.name_domain + link
+            yield Request(catalog_item_link, callback=self.parse_setof_pages)
 
-        catalog_rubrics = sel.xpath('//div[@class="hidden hidden_small"]//div[@class="catalog__rubric"]')
 
-        
-
-        for catalog_rubric in catalog_rubrics:
-            #print(sel.xpath('//div[@class="hidden hidden_small"]//div[@class="catalog__rubric"]//span[@class="catalog__rubric__title"]').extract()[2])
-            catalog_rubric_name = catalog_rubric.xpath('//span[@class="catalog__rubric__title"]/text()').extract()[0]
-            catalog_items = catalog_rubric.xpath('//div[@class="cataloc__rubric__items"]//a[@class="catalog__item"]')
-
-            print("\n\n  catalog_rubric_name=" + catalog_rubric_name + "\n\n")#
-            print(len(catalog_items))
-            for catalog_item in catalog_items:
-                catalog_item_name = catalog_items.xpath('//span[@class="catalog__item__title"]/text()').extract()[0]
-                catalog_item_link = name_domain + catalog_items.xpath('//@href').extract()
-                print(catalog_item_name + " " + catalog_item_name)
-                yield Request(catalog_item_link, callback=self.parse_list_of_drugs)
