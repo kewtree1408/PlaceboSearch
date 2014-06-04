@@ -18,10 +18,12 @@ class DiseaseSpider(Spider):
         sel = Selector(response)
         disease_title = sel.xpath('//h1[@class="page-info__title"]/text()').extract()[0]
         context = ' '.join(sel.xpath('//div[@class="column__air"]/div//text()').extract())        
-        yield  DiseaseDescription(url = response.url,
-                                 name = disease_title,
-                                 description = html2text(context),
-                                 drugs = "",)
+        yield DiseaseDescription(
+                                url=response.url,
+                                name=disease_title,
+                                description=html2text(context),
+                                drugs="",
+                            )
 
     def parse_rubric(self, response):
         sel = Selector(response)
@@ -34,7 +36,6 @@ class DiseaseSpider(Spider):
     def parse(self, response):
         sel = Selector(response)
         url_rubrics = sel.xpath('//div[@class="catalog__rubric"]/a/@href').extract()
-        print 'Hello'
         for url in url_rubrics:
             url = 'http://health.mail.ru/disease/' + url[9:]
             yield Request(url, callback=self.parse_rubric)
