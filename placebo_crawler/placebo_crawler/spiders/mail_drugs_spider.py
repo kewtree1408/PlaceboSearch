@@ -6,24 +6,21 @@ from scrapy.selector import Selector
 from scrapy.spider import Spider
 from scrapy.http import Request
 from placebo_crawler.items import DrugDescription, DiseaseDescription
-# from scrapy import log
-from html2text import html2text 
+from html2text import html2text
 
 import time
 
-# НЕ ДОПИСАН
 class DrugsSpider(Spider):
     """
     Crawler for http://www.health.mail.ru
     """
 
-    name = 'healthmail_drugs'
+    name = 'mail_drugs'
     allowed_domains = ['health.mail.ru']
     # Раздел: "Лекарства группированы по направлению, на что они действуют
     # (пищеварительный тракт и обмен веществ, дерматология и прочее)"
     start_urls = ['http://health.mail.ru/drug/']
     name_domain = 'http://health.mail.ru' # название домена для относительных ссылок на сайте
-
 
     def p_between_id(self, n, sel):
         lineN = '//div[@class="text margin_bottom_30 js-text_widget"]//h2[%s]/following-sibling::*/text()'%str(n)
@@ -32,48 +29,37 @@ class DrugsSpider(Spider):
         N_1 = sel.xpath(lineN_1).extract()
         return [text for text in (set(N) & set(N_1))]
 
-
     def parse_drug(self, response):
         sel = Selector(response)
         drug_name = sel.xpath('//h1[@class="page-info__title"]/text()').extract()[0]
-
         context = sel.xpath('//div[@class="column__air"]').extract()[0]
-
         classification = ''
 
         all_subheads = sel.xpath('//div[@class="text margin_bottom_30 js-text_widget"]//h2/text()').extract()
-        #print(all_subheads)
         description, usage, contra, side, overdose = '', '', '', '', ''
         for i, subhead in enumerate(all_subheads):
-            #print(i, subhead)
-            print("\n" + str(i) + "\n")
             n = i+1
-
-            #if subhead == u"Форма выпуска, состав и упаковка":
             if u"Форма выпуска, состав и упаковка" in subhead:
                 description = ''.join(self.p_between_id(n, sel))
-            #elif subhead == u"Дозировка" or subhead == u"Показания":
             elif u"Дозировка" in subhead or u"Показания" in subhead:
                 usage = ''.join(self.p_between_id(n, sel))
-            #elif subhead == u"Противопоказания":
             elif u"Противопоказания" in subhead:
                 contra = ''.join(self.p_between_id(n, sel))
-            #elif subhead == u"Побочные действия":
             elif u"Побочные действия" in subhead:
                 side = ''.join(self.p_between_id(n, sel))
-            #elif subhead == u"Передозировка":
             elif u"Передозировка" in subhead:
                 overdose = ''.join(self.p_between_id(n, sel))
-            yield DrugDescription(  url=response.url,
-                                name=drug_name,
-                                classification=classification,
-                                description=description,
-                                usage=usage,
-                                contra=contra,
-                                side=side,
-                                overdose=overdose,
-                                info=html2text(context),
-                            )
+            yield DrugDescription(
+                            url=response.url,
+                            name=drug_name,
+                            classification=classification,
+                            description=description,
+                            usage=usage,
+                            contra=contra,
+                            side=side,
+                            overdose=overdose,
+                            info=html2text(context),
+                        )
 
     def parse_list_of_drugs(self, response):
         sel = Selector(response)
@@ -82,8 +68,6 @@ class DrugsSpider(Spider):
         for url in url_drugs:
             absolutely_url_drug = self.name_domain + url
             yield Request(absolutely_url_drug, callback=self.parse_drug)
-
-
 
     def parse_setof_pages(self, response):
         sel = Selector(response)
@@ -103,5 +87,4 @@ class DrugsSpider(Spider):
         for link in rubric_links:
             catalog_item_link = self.name_domain + link
             yield Request(catalog_item_link, callback=self.parse_setof_pages)
-
 
