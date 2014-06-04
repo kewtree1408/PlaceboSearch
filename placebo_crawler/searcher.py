@@ -66,10 +66,15 @@ class DocStat2(object):
     def __repr__(self):
         return str(self)
 
-    def __equal__(self, ds):
+    def __eq__(self, ds):
         if self.doc_url == ds.doc_url:
             return True
         return False
+
+    def __hash__(self):
+        return hash(self.doc_url)
+
+
 
 
 class DocStat3(object):
@@ -226,16 +231,15 @@ def get_tf_idf(q, ridx, labels=None):
         ...
     ]
     """
-    BIG_WEIGHT = 10.0
+    UP_WEIGHT = 2
     labels = [] if labels is None else list(labels)
     terms_q = dict(get_terms(get_tokens(q)))
-    q_docstats = []
+    q_docstats = dict()
     N = sum([len(ridx.get(t,[])) for t in terms_q])
     print N
     # схема tf-idf для терминов
     term_tf_idf = get_term_tf_idf(terms_q)
     # увеличивает вес
-    doci_norm = collections.defaultdict(lambda: list())
     for t in terms_q:
         all_terms_ridx = ridx.get(t, [])
         df = len(all_terms_ridx)
@@ -245,17 +249,38 @@ def get_tf_idf(q, ridx, labels=None):
             #  учитываем метки
             for label in labels:
                 if label in ds.labels:
-                    ds.weight += BIG_WEIGHT
-            # смотрим на набор документов для терминов из запроса и выясняем,
-            # какой из документов соответствует бОльшему кол-ву слов из запроса
+                    ds.weight *= UP_WEIGHT
             ds.weight *= term_tf_idf[t]
-            print ds.weight, ds.doc_url
-        q_docstats += sorted([docstat for docstat in all_terms_ridx], key=lambda ds: ds.weight)
+        docstats = sorted([docstat for docstat in all_terms_ridx], key=lambda docst: docst.weight)
+        q_docstats[t] = docstats
+    intersection_ds = reduce(set.intersection, [set(q_docstats[t]) for t in q_docstats])
+    q_sum = sum(term_tf_idf[t] for t in terms_q)
+
+    if intersection_ds:
+        for t in terms_q:
+            dq_sum = 0.0
+            d_sum = 0.0
+            qi = term_tf_idf[t]
+            for ds in intersection_ds:
+                if ds.doc_url in [docst.doc_url for docst in q_docstats[t]]:
+                    dq_sum += ds.weight*qi
+                    d_sum += ds.weight
+            if not d_sum: continue
+            for ds in intersection_ds:
+                cos_dq = dq_sum/(sqrt(d_sum)*sqrt(q_sum))
+                ds.weight = cos_dq
+                print cos_dq
+
 
     rank = collections.defaultdict(lambda: [0, list()])
-    for ds in q_docstats:
+    for ds in intersection_ds:
         rank[ds.doc_url][0] += ds.weight
         rank[ds.doc_url][1] += [ds]
+    for t in q_docstats:
+        for ds in q_docstats[t]:
+            if ds.doc_url not in [fds.doc_url for fds in intersection_ds]:
+                rank[ds.doc_url][0] += ds.weight
+                rank[ds.doc_url][1] += [ds]
 
     return sorted([rank[d] for d in rank], key=lambda ds: ds[0], reverse=True)
 
@@ -284,13 +309,15 @@ def get_similarity(q, idx, tf_idf):
     return sorted(rank_lm, key=lambda ds: ds.weight)
 
 
-def finder(q, labels=None):
-    ridx, inx = get_indexes('rindex.pkl', 'index.pkl')
-    tf_idf = get_tf_idf(q, ridx, labels)
+def finder(q, labels=None, ridx=None):
+    if ridx:
+        return get_tf_idf(q, ridx, labels)
+    return []
+
     # пока не понятно, убираем или оставляем похожесть и как ее учитывать?
     # sim = get_similarity(q, idx, tf_idf)
     # print sim
-    return tf_idf
+
 
 
 def snippet_by(ds):
@@ -355,27 +382,18 @@ def get_lst_snippet(lst_result):
 
 
 def main():
-    # query = u"сердечный спазм"
-    # labels = ['drug', 'overdose']
+    query = u"сердечный спазм"
+    labels = ['drug', 'overdose']
     # Выясняем, насколько наш запрос соответствует документу
-    # finder(query)
-
-    res = get_indexes('rindex.pkl', 'index.pkl')
+    ridx, idx = get_indexes('rindex.pkl', 'index.pkl')
+    res = finder(query, labels, ridx)
     print res
+
     # при обновлении индекса, очищаем кеш
     dbconnection = MongoClient('localhost', 27017)
     db = dbconnection['placebo']
     db['queries'].remove()
 
 
-
 if __name__ == '__main__':
-    # main()
-    query = u"самое самое первое в мире лекарство в мире"
-    terms_q = dict(get_terms(get_tokens(query)))
-    r = get_term_tf_idf(terms_q)
-    for t in r:
-        print t, r[t]
-
-    query = u"сердечный спазм"
-    finder(query)
+    main()
