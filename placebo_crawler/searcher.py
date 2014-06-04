@@ -35,7 +35,7 @@ logger.addHandler(fh)
 
 class DocStat1(object):
     def __init__(self, item, freq, posids):
-        self.doc_url = item['url'].lstrip('http://www.')
+        self.doc_url = item['url']
         self.freq = freq
         self.posids = list(posids)
         self.weight = 0
