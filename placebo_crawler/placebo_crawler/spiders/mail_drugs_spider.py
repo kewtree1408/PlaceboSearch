@@ -15,7 +15,7 @@ class DrugsSpider(Spider):
     Crawler for http://www.health.mail.ru
     """
 
-    name = 'mail_drugs'
+    name = 'mailru_drugs'
     allowed_domains = ['health.mail.ru']
     # Раздел: "Лекарства группированы по направлению, на что они действуют
     # (пищеварительный тракт и обмен веществ, дерматология и прочее)"
@@ -87,4 +87,4 @@ class DrugsSpider(Spider):
         for link in rubric_links:
             catalog_item_link = self.name_domain + link
             yield Request(catalog_item_link, callback=self.parse_setof_pages)
-
+            # return

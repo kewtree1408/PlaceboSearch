@@ -4,7 +4,8 @@
 from twisted.internet import reactor
 from scrapy.crawler import Crawler
 from scrapy import log, signals
-from placebo_crawler.spiders.rlsnet_spiders import DiseaseSpider, DrugsSpider
+from placebo_crawler.spiders.mail_drugs_spider import DrugsSpider
+from placebo_crawler.spiders.mail_diseases_spider import DiseaseSpider
 from scrapy.utils.project import get_project_settings
 
 
@@ -18,13 +19,13 @@ def setup_crawler(spider):
 
 
 def main():
-	disease = DiseaseSpider()
-	drugs = DrugsSpider()
-	log.start()
-	for spider in (disease, drugs):
-	    setup_crawler(spider)
-	reactor.run()
+    disease = DiseaseSpider()
+    drugs = DrugsSpider()
+    log.start()
+    for spider in (disease, drugs):
+        setup_crawler(spider)
+    reactor.run()
 
 
 if __name__ == '__main__':
-	main()
+    main()

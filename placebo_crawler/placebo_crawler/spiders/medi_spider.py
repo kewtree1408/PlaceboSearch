@@ -74,4 +74,6 @@ class DrugsSpider(Spider):
         for url in url_letters:
             root_url = 'http://medi.ru/' + url[2:]
             yield Request(root_url, callback=self.parse_letter)
+            # return
+
 

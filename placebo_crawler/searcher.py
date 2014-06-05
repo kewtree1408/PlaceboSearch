@@ -164,7 +164,7 @@ def build_rindex():
                     break
                 except Exception as ex:
                     print ex
-                    raise
+
 
     for t, ds in sorted(rindex2.items()):
         # print u"term = %s, ds = %s"%(t, str(ds))
