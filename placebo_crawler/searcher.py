@@ -7,6 +7,11 @@ import string
 import collections
 import logging
 import simplejson
+import os
+import subprocess
+
+import pymorphy2
+from os.path import join
 
 from placebo_crawler.items import DrugDescription, DiseaseDescription
 
@@ -20,7 +25,6 @@ from pymongo import MongoClient
 from pprint import pprint
 from math import log, sqrt
 
-
 rus_stemmer = RussianStemmer()
 
 logger = logging.getLogger()
@@ -31,26 +35,23 @@ fh.setLevel(logging.DEBUG)
 fh.setFormatter(formatter)
 logger.addHandler(fh)
 
+# в morph_dicts хранятся все словари
+# def download_morph():
+#     # скачиваем и используем словарь для получения грамматической информации о слове (часть речи)
+#     path_to_dictionary = os.path.realpath(os.path.curdir)
+#     morph_path = join(path_to_dictionary, 'morph_dicts')
+#     if not os.path.exists(morph_path):
+#         subprocess.call(['wget', 'https://bitbucket.org/kmike/pymorphy/downloads/ru.sqlite-json.zip'])
+#         subprocess.call(['unzip', 'ru.sqlite-json.zip', '-d', 'morph_dicts'])
+#     morph = get_morph(morph_path)
+#     return morph
 
-
-class DocStat1(object):
-    def __init__(self, item, freq, posids):
-        self.doc_url = item['url']
-        self.freq = freq
-        self.posids = list(posids)
-        self.weight = 0
-
-    def __str__(self):
-        posids = ''.join([str(p)+', ' for p in self.posids])
-        return u'%s: <%d(%f), [%s]>' % (str(self.doc_url), self.freq, self.weight, posids)
-
-    def __repr__(self):
-        return str(self)
+morph = pymorphy2.MorphAnalyzer()
 
 
 class DocStat2(object):
     def __init__(self, item, labels, text, freq, posids):
-        self.doc_url = item['url'].lstrip('http://www.')
+        self.doc_url = item['url'].lstrip('http://')
         self.freq = freq
         self.posids = list(posids)
         self.labels = labels
@@ -75,19 +76,17 @@ class DocStat2(object):
         return hash(self.doc_url)
 
 
-
-
-class DocStat3(object):
-    def __init__(self, item, text):
-        self.doc_url = item['url'].lstrip('http://www.')
-        self.text = text
-        self.weight = 0.0
-
-    def __str__(self):
-        return u'%s: <%d ..., (%f)>' % (self.doc_url, len(self.text), self.weight)
-
-    def __repr__(self):
-        return str(self)
+# class DocStat3(object):
+#     def __init__(self, item, text):
+#         self.doc_url = item['url'].lstrip('http://www.')
+#         self.text = text
+#         self.weight = 0.0
+#
+#     def __str__(self):
+#         return u'%s: <%d ..., (%f)>' % (self.doc_url, len(self.text), self.weight)
+#
+#     def __repr__(self):
+#         return str(self)
 
 
 def is_punctuation(token):
@@ -97,16 +96,32 @@ def is_punctuation(token):
     return False
 
 
+# POS - parst of speech - опредление части речи для русского языка
+# с помощью библиотеки: http://pymorphy2.readthedocs.org/en/master/user/guide.html
+def custom_pos_tag(token):
+    global morph
+    p = morph.parse(unicode(token))[0]
+    return p.tag.POS
+
+
+# второстепенные части речи: предлог, междометие, союз, частица, местоимение
+def is_minorPOS(token):
+    if custom_pos_tag(token) in [u'PREP', u'INTJ', u'CONJ', u'PRCL', u'NPRO']:
+        return True
+    return False
+
+
 # получаем уникальные токены для текущего документа
 def get_tokens(text):
     tokens = collections.defaultdict(lambda: (0, list()))  # {'token': (freq(int), posids(list))}
     pos = 0
     for t in wordpunct_tokenize(text):
-        if not is_punctuation(t):
+        if not is_punctuation(t) and not is_minorPOS(t):
             t_pos = text.find(t, pos)
             pos = t_pos if t_pos != -1 else pos
             freq, posids = tokens[t]
             tokens[t] = freq + 1, posids + [pos]
+
     return tokens
 
 
@@ -121,24 +136,22 @@ def get_terms(tokens):
     return terms
 
 
-def update_rindex2(rindex, item, first_tag, key_name='info'):
+def update_rindex2(rindex, item, first_tag):
     tags = item.keys()
-    tags.remove(key_name)
     for tag in tags:
         text = item[tag]
         terms = get_terms(get_tokens(text))
         for trm in terms:
-            # print text
             rindex[trm] += [DocStat2(item, [first_tag, tag], text, *terms[trm])]
 
 
-def update_index3(index, item, key_name='info'):
-    text = item[key_name]
-    ds = DocStat3(item, text)
-    index[ds.doc_url] = ds
+# def update_index3(index, item, key_name='info'):
+#     text = item[key_name]
+#     ds = DocStat3(item, text)
+#     index[ds.doc_url] = ds
 
 
-def update_indexes(rindex1, rindex2, index3, item, main_tag):
+def update_index(rindex2, item, main_tag):
     """
     update rindex:
     rindex = {
@@ -147,20 +160,17 @@ def update_indexes(rindex1, rindex2, index3, item, main_tag):
         ...
     }
     """
-    key_value = ''
-    if main_tag == 'drug':
-        key_value = 'info'
-    elif main_tag == 'disease':
-        key_value = 'description'
+    # key_value = ''
+    # if main_tag == 'drug':
+    #     key_value = 'info'
+    # elif main_tag == 'disease':
+    #     key_value = 'description'
 
-    update_rindex2(rindex2, item, main_tag, key_value)
-    update_index3(index3, item, key_value)
+    update_rindex2(rindex2, item, main_tag)
 
 
 def build_rindex():
-    rindex1 = collections.defaultdict(lambda: list())
     rindex2 = collections.defaultdict(lambda: list())
-    index3 = dict()
 
     for main_tag in ['DRUG', 'DISEASE']:
         fname = "items_%s.pkl" % main_tag
@@ -168,7 +178,7 @@ def build_rindex():
             while bf:
                 try:
                     obj = cPickle.load(bf)
-                    update_indexes(rindex1, rindex2, index3, obj, main_tag.lower())
+                    update_index(rindex2, obj, main_tag.lower())
                 except EOFError as err:
                     print "end load"
                     break
@@ -177,24 +187,19 @@ def build_rindex():
                     raise
 
     for t, ds in sorted(rindex2.items()):
-        # print u"term = %s, ds = %s"%(t, str(ds))
         logger.debug(u"term = %s, ds = %s", t, str(ds))
 
-    return dict(rindex2), dict(index3)
+    return dict(rindex2)
 
-def get_indexes(ridx_fname, idx_fname):
+def get_index(ridx_fname):
     try:
-        with open(idx_fname, 'rb') as ibf:
-            index = cPickle.load(ibf)
         with open(ridx_fname, 'rb') as ribf:
             rindex = cPickle.load(ribf)
     except IOError as ex:
-        rindex, index = build_rindex()
-        with open(idx_fname, 'wb')  as ibf:
-            cPickle.dump(index, ibf)
+        rindex = build_rindex()
         with open(ridx_fname, 'wb') as ribf:
             cPickle.dump(rindex, ribf)
-    return rindex, index
+    return rindex
 
 
 # def finder(q, ridx):
@@ -223,7 +228,7 @@ def get_term_tf_idf(terms_q):
     return t_w
 
 
-def get_tf_idf(q, ridx, labels=None):
+def get_tf_idf(query, ridx, labels=None):
     """
     Возвращает список из списков: [
         [tf-idx, [DocStat2_11, DocStat2_21, DocStat2_31, ...]],
@@ -233,12 +238,14 @@ def get_tf_idf(q, ridx, labels=None):
     """
     UP_WEIGHT = 2
     labels = [] if labels is None else list(labels)
-    terms_q = dict(get_terms(get_tokens(q)))
+    terms_q = dict(get_terms(get_tokens(query)))
     q_docstats = dict()
     N = sum([len(ridx.get(t,[])) for t in terms_q])
     print N
     # схема tf-idf для терминов
     term_tf_idf = get_term_tf_idf(terms_q)
+    # пересечение документов для всех термов
+    intersection_ds = []
     # увеличивает вес
     for t in terms_q:
         all_terms_ridx = ridx.get(t, [])
@@ -253,7 +260,8 @@ def get_tf_idf(q, ridx, labels=None):
             ds.weight *= term_tf_idf[t]
         docstats = sorted([docstat for docstat in all_terms_ridx], key=lambda docst: docst.weight)
         q_docstats[t] = docstats
-    intersection_ds = reduce(set.intersection, [set(q_docstats[t]) for t in q_docstats])
+    if q_docstats:
+        intersection_ds = reduce(set.intersection, [set(q_docstats[t]) for t in q_docstats])
     q_sum = sum(term_tf_idf[t] for t in terms_q)
 
     if intersection_ds:
@@ -270,7 +278,6 @@ def get_tf_idf(q, ridx, labels=None):
                 cos_dq = dq_sum/(sqrt(d_sum)*sqrt(q_sum))
                 ds.weight = cos_dq
                 print cos_dq
-
 
     rank = collections.defaultdict(lambda: [0, list()])
     for ds in intersection_ds:
@@ -382,10 +389,10 @@ def get_lst_snippet(lst_result):
 
 
 def main():
-    query = u"сердечный спазм"
+    query = u"ах и ох в и при"
     labels = ['drug', 'overdose']
     # Выясняем, насколько наш запрос соответствует документу
-    ridx, idx = get_indexes('rindex.pkl', 'index.pkl')
+    ridx = get_index('rindex.pkl')
     res = finder(query, labels, ridx)
     print res
 

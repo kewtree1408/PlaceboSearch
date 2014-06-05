@@ -82,5 +82,5 @@ class DrugsSpider(Spider):
             print root_url
             yield Request(root_url, callback=self.parse_letter)
             p += 1
-            if p > 2:
+            if p > 4:
                 break

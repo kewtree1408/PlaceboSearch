@@ -3,7 +3,7 @@
 
 from flask import Flask, Blueprint, render_template, jsonify, redirect, url_for, current_app, flash, request
 from search_engine.utils import build_pager_big
-from searcher import finder, get_lst_snippet, get_indexes, DocStat3, DocStat2
+from searcher import finder, get_lst_snippet, get_index, DocStat2
 import simplejson
 import traceback
 import logging
@@ -17,7 +17,7 @@ logging.basicConfig(
 log = logging.getLogger()
 log.setLevel(logging.DEBUG)
 
-RINDEX, IDX = get_indexes('rindex.pkl', 'index.pkl')
+RINDEX = get_index('rindex.pkl')
 search = Flask(__name__, static_folder='search_engine/static', template_folder='search_engine/templates')
 
 
