@@ -20,6 +20,7 @@ from nltk.stem.snowball import RussianStemmer
 from nltk.probability import LidstoneProbDist
 from nltk.model.ngram import NgramModel
 from pymongo import MongoClient
+from heapq import heappush, heappop, nlargest
 
 
 from pprint import pprint
@@ -246,6 +247,8 @@ def get_tf_idf(query, ridx, labels=None):
     term_tf_idf = get_term_tf_idf(terms_q)
     # пересечение документов для всех термов
     intersection_ds = []
+    # куча документов
+    heap_docstats = []
     # увеличивает вес
     for t in terms_q:
         all_terms_ridx = ridx.get(t, [])
@@ -256,9 +259,11 @@ def get_tf_idf(query, ridx, labels=None):
             #  учитываем метки
             for label in labels:
                 if label in ds.labels:
-                    ds.weight *= UP_WEIGHT
+                    ds.weight += UP_WEIGHT
             ds.weight *= term_tf_idf[t]
+            # heappush(heap_docstats, (ds.weight, ds))
         docstats = sorted([docstat for docstat in all_terms_ridx], key=lambda docst: docst.weight)
+
         q_docstats[t] = docstats
     if q_docstats:
         intersection_ds = reduce(set.intersection, [set(q_docstats[t]) for t in q_docstats])
@@ -326,7 +331,6 @@ def finder(q, labels=None, ridx=None):
     # print sim
 
 
-
 def snippet_by(ds):
     SIZE_SNIPPET = 80
     if not isinstance(ds.posids, list):
@@ -336,29 +340,40 @@ def snippet_by(ds):
     pos = 0
     begin_pos = pos1
     second_pos = 0
+    BORDER = 100
 
-    for t in wordpunct_tokenize(text):
-        if text[pos].isupper():
-            begin_pos = pos
-        if is_punctuation(text[pos]):
-            second_pos = pos
-        if pos - begin_pos > SIZE_SNIPPET/2:
-            begin_pos = second_pos
-        if pos < pos1 and pos - begin_pos < SIZE_SNIPPET/2:
-            # space_pos = text.rfind(' ', 0, begin_pos-1)
-            text_without_endspaces = text[begin_pos:pos1] + '$' + text[pos1:pos1+SIZE_SNIPPET].strip()
-            text_without_lf = text_without_endspaces.replace('\n', '; ')
-            snippet = text_without_lf + "..."
-            return snippet
-        pos += 1
+    pos2 = text.find(' ', pos1)
+    return text[pos1-BORDER:pos1] + text[pos1:pos2].upper() + text[pos2:pos2+BORDER]
+
+    # for t in wordpunct_tokenize(text):
+    #     if text[pos].isupper():
+    #         begin_pos = pos
+    #     if is_punctuation(text[pos]):
+    #         second_pos = pos
+    #     if pos - begin_pos > SIZE_SNIPPET/2:
+    #         begin_pos = second_pos
+    #     if pos < pos1 and pos - begin_pos < SIZE_SNIPPET/2:
+    #         # space_pos = text.rfind(' ', 0, begin_pos-1)
+    #         text_without_endspaces = text[begin_pos:pos1] + '$' + text[pos1:pos1+SIZE_SNIPPET].strip()
+    #         text_without_lf = text_without_endspaces.replace('\n', '; ')
+    #         snippet = text_without_lf + "..."
+    #         return snippet
+    #     pos += 1
 
 
-def get_snippet(lst_result):
+def get_snippet(lst_result, out_labels):
     for res in lst_result:
         weight = res[0]
         lst_ds = res[1]
-        ds = lst_ds[0]
-        yield snippet_by(ds)
+        labels_set = set()
+        cur_ds = None
+        for ds in lst_ds:
+            for l in ds.labels:
+                if l in out_labels:
+                    labels_set.add(l)
+                cur_ds = ds
+        cur_ds.labels = labels_set
+        yield snippet_by(cur_ds)
 
 
 TRANSLATE_LBLs = {
@@ -371,30 +386,45 @@ TRANSLATE_LBLs = {
     'side': u'побочные действия',
     'overdose': u'передозировка',
     'name': u'название',
+    'disease': u'заболевание',
 }
 
-def get_lst_snippet(lst_result):
+
+def get_lst_snippet(lst_result, out_labels):
     snippet = []
     for res in lst_result:
         weight = res[0]
         lst_ds = res[1]
-        ds = lst_ds[0]
-        labels = [TRANSLATE_LBLs.get(l.strip(), u'') for l in ds.labels]
-        snippet.append({'url': ds.doc_url,
-                        'domain': ds.doc_url.split('/')[0],
+        labels_set = set()
+        cur_ds = None
+        for ds in lst_ds:
+            for l in ds.labels:
+                if l in out_labels:
+                    labels_set.add(l)
+                cur_ds = ds
+
+        sn_labels = labels_set if labels_set else lst_ds[0].labels
+        print sn_labels
+        labels = [TRANSLATE_LBLs.get(l.strip(), u'') for l in sn_labels]
+        snippet.append({'url': cur_ds.doc_url,
+                        'domain': cur_ds.doc_url.split('/')[0],
                         'labels': labels,
-                        'shorter': snippet_by(ds),
-                        'title': ds.title})
+                        'shorter': snippet_by(cur_ds),
+                        'title': cur_ds.title})
     return snippet
 
 
 def main():
-    query = u"ах и ох в и при"
-    labels = ['drug', 'overdose']
+    query = u"сердечный приступ"
+    labels = ['contra', 'overdose']
     # Выясняем, насколько наш запрос соответствует документу
     ridx = get_index('rindex.pkl')
     res = finder(query, labels, ridx)
-    print res
+    snippets = get_lst_snippet(res, labels)
+    for snippet in snippets:
+        for l in snippet['labels']:
+            print l,
+        print snippet['shorter']
 
     # при обновлении индекса, очищаем кеш
     dbconnection = MongoClient('localhost', 27017)
