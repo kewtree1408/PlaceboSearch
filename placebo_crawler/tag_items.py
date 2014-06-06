@@ -1,7 +1,7 @@
 #! /usr/bin/env python
 # coding: utf-8
 
-class tag_items(object):
+class TagItems(object):
     tags = {} # { "teg" : [] }
 
     def __init__(self, stem):

@@ -9,12 +9,13 @@ import logging
 import simplejson
 
 from placebo_crawler.items import DrugDescription, DiseaseDescription
-from tag_items import tag_items
+from tag_items import TagItems
 
 from nltk import wordpunct_tokenize
 from nltk.stem.snowball import RussianStemmer
 from nltk.probability import LidstoneProbDist
 from nltk.model.ngram import NgramModel
+from nltk import wordpunct_tokenize
 from pymongo import MongoClient
 
 
@@ -278,25 +279,27 @@ def get_tags(q):
 
     labels = []
     stem = lambda word: rus_stemmer.stem(word)
-    all_labels = tag_items(stem).tags
+    all_labels = TagItems(stem).tags
 
-    words = q.split(' ')
+    #words = q.split(' ')
+    words = wordpunct_tokenize(q)
 
     clean_q = []
 
     for word in words: # разбиваем на слова из запроса
         low_word = word.lower()
         term = rus_stemmer.stem(low_word)
-        is_label = False
-        for key, value in all_labels.iteritems(): # проходим по словарю тегов
-            for synonym in value: # проходим по списку синонимов тега
-                if term == synonym:
-                    if not term in labels:
-                        labels.append(key)
-                        is_label = True
-        if is_label == False:
-            if not word in clean_q:
-                clean_q.append(word)
+        if not is_punctuation(term):
+            is_label = False
+            for key, value in all_labels.iteritems(): # проходим по словарю тегов
+                for synonym in value: # проходим по списку синонимов тега
+                    if term == synonym:
+                        if not term in labels:
+                            labels.append(key)
+                            is_label = True
+            if is_label == False:
+                if not word in clean_q:
+                    clean_q.append(word)
 
     str_clean_q = ' '.join(clean_q)
     return ( str_clean_q, labels)
@@ -365,7 +368,7 @@ def get_lst_snippet(lst_result):
 
 def main():
     """
-    query = u"сердечный спазм симптомы противопоказания"
+    query = u"сердечный спазм,симптомы; ; : противопоказания,,,"
     #labels = ['drug', 'overdose']
     #Выясняем, насколько наш запрос соответствует документу
     finder(query)
