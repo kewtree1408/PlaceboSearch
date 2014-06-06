@@ -35,3 +35,14 @@ class DiseaseDescription(Item):
     name = Field()
     description = Field()
     drugs = Field()
+
+
+class DrugSynonyms(Item):
+    """
+    Синонимы лекарств:
+    -название
+    -список синонимовы
+    """
+    url = Field()
+    name = Field()
+    synonyms = Field()
