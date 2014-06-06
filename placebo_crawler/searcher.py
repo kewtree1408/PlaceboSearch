@@ -9,6 +9,7 @@ import logging
 import simplejson
 
 from placebo_crawler.items import DrugDescription, DiseaseDescription
+from tag_items import tag_items
 
 from nltk import wordpunct_tokenize
 from nltk.stem.snowball import RussianStemmer
@@ -260,12 +261,45 @@ def get_similarity(q, idx, tf_idf):
 
 
 def finder(q, labels=None):
+
+    q, labels = get_tags(q)
+
     ridx, inx = get_indexes('rindex.pkl', 'index.pkl')
     tf_idf = get_tf_idf(q, ridx, labels)
+
     # пока не понятно, убираем или оставляем похожесть и как ее учитывать?
     # sim = get_similarity(q, idx, tf_idf)
     # print sim
     return tf_idf
+
+# Ищем теги и удаляем их из запроса, отмечаем что встретился такой тег
+def get_tags(q):
+    #labels = ['drug', 'overdose']
+
+    labels = []
+    stem = lambda word: rus_stemmer.stem(word)
+    all_labels = tag_items(stem).tags
+
+    words = q.split(' ')
+
+    clean_q = []
+
+    for word in words: # разбиваем на слова из запроса
+        low_word = word.lower()
+        term = rus_stemmer.stem(low_word)
+        is_label = False
+        for key, value in all_labels.iteritems(): # проходим по словарю тегов
+            for synonym in value: # проходим по списку синонимов тега
+                if term == synonym:
+                    if not term in labels:
+                        labels.append(key)
+                        is_label = True
+        if is_label == False:
+            if not word in clean_q:
+                clean_q.append(word)
+
+    str_clean_q = ' '.join(clean_q)
+    return ( str_clean_q, labels)
 
 
 def snippet_by(ds):
@@ -330,10 +364,13 @@ def get_lst_snippet(lst_result):
 
 
 def main():
-    # query = u"сердечный спазм"
-    # labels = ['drug', 'overdose']
-    # Выясняем, насколько наш запрос соответствует документу
-    # finder(query)
+    """
+    query = u"сердечный спазм симптомы противопоказания"
+    #labels = ['drug', 'overdose']
+    #Выясняем, насколько наш запрос соответствует документу
+    finder(query)
+    """
+
 
     res = get_indexes('rindex.pkl', 'index.pkl')
     print res
