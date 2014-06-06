@@ -2,7 +2,31 @@
 import codecs
 
 
+#! /usr/bin/env python
+# coding: utf-8
+
+from twisted.internet import reactor
+from scrapy.crawler import Crawler
+from scrapy import log, signals
+from placebo_crawler.spiders.drug_synonyms_spider import DrugSynonymsSpider
+from scrapy.utils.project import get_project_settings
+
+
+def setup_crawler(spider):
+    settings = get_project_settings()
+    crawler = Crawler(settings)
+    crawler.configure()
+    crawler.signals.connect(reactor.stop, signal=signals.spider_closed)
+    crawler.crawl(spider)
+    crawler.start()
+
+
 def main():
+    spider = DrugSynonymsSpider()
+    log.start()
+    setup_crawler(spider)
+    reactor.run()
+
     items = []
     with codecs.open('drug_synonyms.txt', encoding='utf8', mode='r') as file:
         synonyms = []
