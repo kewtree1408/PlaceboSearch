@@ -36,34 +36,23 @@ fh.setLevel(logging.DEBUG)
 fh.setFormatter(formatter)
 logger.addHandler(fh)
 
-# в morph_dicts хранятся все словари
-# def download_morph():
-#     # скачиваем и используем словарь для получения грамматической информации о слове (часть речи)
-#     path_to_dictionary = os.path.realpath(os.path.curdir)
-#     morph_path = join(path_to_dictionary, 'morph_dicts')
-#     if not os.path.exists(morph_path):
-#         subprocess.call(['wget', 'https://bitbucket.org/kmike/pymorphy/downloads/ru.sqlite-json.zip'])
-#         subprocess.call(['unzip', 'ru.sqlite-json.zip', '-d', 'morph_dicts'])
-#     morph = get_morph(morph_path)
-#     return morph
-
 morph = pymorphy2.MorphAnalyzer()
 
 
 class DocStat2(object):
-    def __init__(self, item, labels, text, freq, posids):
+    def __init__(self, item, labels, freq, posids):
         self.doc_url = item['url'].lstrip('http://')
         self.freq = freq
         self.posids = list(posids)
         self.labels = labels
         self.weight = 0
-        self.text = text
-        self.title = item['name']
+        # self.text = text
+        self.title = item['name'].replace('.', ' ')
 
     def __str__(self):
         posids = ''.join([str(p)+', ' for p in self.posids])
         labels = ''.join([str(l)+', ' for l in self.labels])
-        return u'%s: <%d(%f), [%s], [%s]> <text...%d>' % (self.doc_url, self.freq, self.weight, posids, labels, len(self.text))
+        return u'%s: <%d(%f), [%s], [%s]>' % (self.doc_url, self.freq, self.weight, posids, labels)
 
     def __repr__(self):
         return str(self)
@@ -75,20 +64,6 @@ class DocStat2(object):
 
     def __hash__(self):
         return hash(self.doc_url)
-
-
-# class DocStat3(object):
-#     def __init__(self, item, text):
-#         self.doc_url = item['url'].lstrip('http://www.')
-#         self.text = text
-#         self.weight = 0.0
-#
-#     def __str__(self):
-#         return u'%s: <%d ..., (%f)>' % (self.doc_url, len(self.text), self.weight)
-#
-#     def __repr__(self):
-#         return str(self)
-
 
 def is_punctuation(token):
     for punct in string.punctuation:
@@ -137,13 +112,17 @@ def get_terms(tokens):
     return terms
 
 
-def update_rindex2(rindex, item, first_tag):
+def update_rindex2(rindex, item, db_text, first_tag):
     tags = item.keys()
     for tag in tags:
         text = item[tag]
         terms = get_terms(get_tokens(text))
         for trm in terms:
-            rindex[trm] += [DocStat2(item, [first_tag, tag], text, *terms[trm])]
+            lbls = [first_tag, tag]
+            DS = DocStat2(item, lbls, *terms[trm])
+            rindex[trm] += [DS]
+            key = '%s_%s' % (DS.title, ''.join(lbls))
+            db_text.insert({key: text})
 
 
 # def update_index3(index, item, key_name='info'):
@@ -152,7 +131,7 @@ def update_rindex2(rindex, item, first_tag):
 #     index[ds.doc_url] = ds
 
 
-def update_index(rindex2, item, main_tag):
+def update_index(rindex2, item, db_text, main_tag):
     """
     update rindex:
     rindex = {
@@ -167,10 +146,10 @@ def update_index(rindex2, item, main_tag):
     # elif main_tag == 'disease':
     #     key_value = 'description'
 
-    update_rindex2(rindex2, item, main_tag)
+    update_rindex2(rindex2, item, db_text, main_tag)
 
 
-def build_rindex():
+def build_rindex(db_text):
     rindex2 = collections.defaultdict(lambda: list())
 
     for main_tag in ['DRUG', 'DISEASE']:
@@ -179,7 +158,7 @@ def build_rindex():
             while bf:
                 try:
                     obj = cPickle.load(bf)
-                    update_index(rindex2, obj, main_tag.lower())
+                    update_index(rindex2, obj, db_text, main_tag.lower())
                 except EOFError as err:
                     print "end load"
                     break
@@ -192,12 +171,12 @@ def build_rindex():
 
     return dict(rindex2)
 
-def get_index(ridx_fname):
+def get_index(ridx_fname, db_text):
     try:
         with open(ridx_fname, 'rb') as ribf:
             rindex = cPickle.load(ribf)
     except IOError as ex:
-        rindex = build_rindex()
+        rindex = build_rindex(db_text)
         with open(ridx_fname, 'wb') as ribf:
             cPickle.dump(rindex, ribf)
     return rindex
@@ -265,6 +244,7 @@ def get_tf_idf(query, ridx, labels=None):
         docstats = sorted([docstat for docstat in all_terms_ridx], key=lambda docst: docst.weight)
 
         q_docstats[t] = docstats
+
     if q_docstats:
         intersection_ds = reduce(set.intersection, [set(q_docstats[t]) for t in q_docstats])
     q_sum = sum(term_tf_idf[t] for t in terms_q)
@@ -331,49 +311,16 @@ def finder(q, labels=None, ridx=None):
     # print sim
 
 
-def snippet_by(ds):
+def snippet_by(ds, text):
     SIZE_SNIPPET = 80
     if not isinstance(ds.posids, list):
         ds.posids = list(ds.posids)
+
     pos1 = ds.posids[0]
-    text = ds.text
-    pos = 0
-    begin_pos = pos1
-    second_pos = 0
     BORDER = 100
 
     pos2 = text.find(' ', pos1)
     return text[pos1-BORDER:pos1] + text[pos1:pos2].upper() + text[pos2:pos2+BORDER]
-
-    # for t in wordpunct_tokenize(text):
-    #     if text[pos].isupper():
-    #         begin_pos = pos
-    #     if is_punctuation(text[pos]):
-    #         second_pos = pos
-    #     if pos - begin_pos > SIZE_SNIPPET/2:
-    #         begin_pos = second_pos
-    #     if pos < pos1 and pos - begin_pos < SIZE_SNIPPET/2:
-    #         # space_pos = text.rfind(' ', 0, begin_pos-1)
-    #         text_without_endspaces = text[begin_pos:pos1] + '$' + text[pos1:pos1+SIZE_SNIPPET].strip()
-    #         text_without_lf = text_without_endspaces.replace('\n', '; ')
-    #         snippet = text_without_lf + "..."
-    #         return snippet
-    #     pos += 1
-
-
-def get_snippet(lst_result, out_labels):
-    for res in lst_result:
-        weight = res[0]
-        lst_ds = res[1]
-        labels_set = set()
-        cur_ds = None
-        for ds in lst_ds:
-            for l in ds.labels:
-                if l in out_labels:
-                    labels_set.add(l)
-                cur_ds = ds
-        cur_ds.labels = labels_set
-        yield snippet_by(cur_ds)
 
 
 TRANSLATE_LBLs = {
@@ -390,9 +337,9 @@ TRANSLATE_LBLs = {
 }
 
 
-def get_lst_snippet(lst_result, out_labels):
+def get_lst_snippet(lst_result, out_labels, db_text, begin=0, end=-1):
     snippet = []
-    for res in lst_result:
+    for res in lst_result[begin:end]:
         weight = res[0]
         lst_ds = res[1]
         labels_set = set()
@@ -405,32 +352,53 @@ def get_lst_snippet(lst_result, out_labels):
 
         sn_labels = labels_set if labels_set else lst_ds[0].labels
         print sn_labels
+        key = "%s_%s" % (cur_ds.title, ''.join(cur_ds.labels))
+        print key
+        text = db_text.find({key: {"$exists": "true"}})
+        print text.count()
+        if text.count() > 0:
+            text = text[0][key]
+            print text
+        else:
+            raise
         labels = [TRANSLATE_LBLs.get(l.strip(), u'') for l in sn_labels]
         snippet.append({'url': cur_ds.doc_url,
                         'domain': cur_ds.doc_url.split('/')[0],
                         'labels': labels,
-                        'shorter': snippet_by(cur_ds),
+                        'shorter': snippet_by(cur_ds, text),
                         'title': cur_ds.title})
     return snippet
 
 
 def main():
+    # при обновлении индекса, очищаем кеш запросов
+    host, port = '0.0.0.0', 8007
+    dbconnection = MongoClient('localhost', 27017)
+    db = dbconnection['placebo']
+    db['queries'].remove()
+    db_text = db['text_for_snippets']
+
     query = u"сердечный приступ"
     labels = ['contra', 'overdose']
     # Выясняем, насколько наш запрос соответствует документу
-    ridx = get_index('rindex.pkl')
+    ridx = get_index('rindex.pkl', db_text)
     res = finder(query, labels, ridx)
-    snippets = get_lst_snippet(res, labels)
+
+    snippets = get_lst_snippet(res, labels, db_text, 1, 2)
     for snippet in snippets:
         for l in snippet['labels']:
             print l,
         print snippet['shorter']
 
-    # при обновлении индекса, очищаем кеш
+
+class RIndex(object):
     dbconnection = MongoClient('localhost', 27017)
     db = dbconnection['placebo']
-    db['queries'].remove()
+    db_text = db['text_for_snippets']
+    # db_text.ensureIndex( { userid: 1 } )
 
+    def get_ridx(self):
+        return get_index('rindex.pkl', self.db_text)
 
 if __name__ == '__main__':
     main()

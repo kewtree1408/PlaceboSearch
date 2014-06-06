@@ -4,6 +4,7 @@
 from flask import Flask, Blueprint, render_template, jsonify, redirect, url_for, current_app, flash, request
 from search_engine.utils import build_pager_big
 from searcher import finder, get_lst_snippet, get_index, DocStat2
+from searcher import RIndex
 import simplejson
 import traceback
 import logging
@@ -17,9 +18,9 @@ logging.basicConfig(
 log = logging.getLogger()
 log.setLevel(logging.DEBUG)
 
-RINDEX = get_index('rindex.pkl')
-search = Flask(__name__, static_folder='search_engine/static', template_folder='search_engine/templates')
 
+search = Flask(__name__, static_folder='search_engine/static', template_folder='search_engine/templates')
+RINDEX = RIndex().get_ridx()
 
 @search.route('/api/<query>', methods=['GET','POST'])
 def finder_q(query):
@@ -48,7 +49,7 @@ def index():
                 snippets = cursor[0][query]
             else:
                 logging.debug("%s", RINDEX)
-                snippets = get_lst_snippet(finder(query, labels, RINDEX), labels)
+                snippets = get_lst_snippet(finder(query, labels, RINDEX), labels, search.text_sn)
                 search.last_queries.insert({query: snippets})
             answers = snippets[(page-1)*n_p:(page-1)*n_p+n_p]
 
@@ -61,11 +62,14 @@ def index():
         return jsonify(error=traceback.format_exc())
 
 
-if __name__ == "__main__":
+def set_db():
     host, port = '0.0.0.0', 8007
     search.dbconnection = MongoClient('localhost', 27017)
     search.db = search.dbconnection['placebo']
     search.last_queries = search.db['queries']
-    search.run(host=host, port=port, debug=True) #add debug
+    search.text_sn = search.db['text_for_snippets']
+    search.run(host=host, port=port, debug=True)  # add debug
 
+if __name__ == "__main__":
+    set_db()
 
