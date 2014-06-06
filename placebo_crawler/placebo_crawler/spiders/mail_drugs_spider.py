@@ -23,11 +23,20 @@ class DrugsSpider(Spider):
     name_domain = 'http://health.mail.ru' # название домена для относительных ссылок на сайте
 
     def p_between_id(self, n, sel):
-        lineN = '//div[@class="text margin_bottom_30 js-text_widget"]//h2[%s]/following-sibling::*/text()'%str(n)
+        lineN = '//div[@class="text margin_bottom_30 js-text_widget"]//h2[%s]/following-sibling::*[self::p or self::table or self::div/p]//text()'%str(n)
         N = sel.xpath(lineN).extract()
-        lineN_1 = '//div[@class="text margin_bottom_30 js-text_widget"]//h2[%s]/preceding-sibling::*/text()'%str(n+1)
+        lineN_1 = '//div[@class="text margin_bottom_30 js-text_widget"]//h2[%s]/preceding-sibling::*[self::p or self::table or self::div/p]//text()'%str(n+1)
         N_1 = sel.xpath(lineN_1).extract()
-        return [text for text in (set(N) & set(N_1))]
+
+        text = []
+        for string_n in N:
+            for string_n_1 in N_1:
+                if string_n == string_n_1:
+                    if not string_n == '\n': # часто переводы строк
+                        text.append(string_n)
+
+        return text
+
 
     def parse_drug(self, response):
         sel = Selector(response)
@@ -49,7 +58,7 @@ class DrugsSpider(Spider):
                 side = ''.join(self.p_between_id(n, sel))
             elif u"Передозировка" in subhead:
                 overdose = ''.join(self.p_between_id(n, sel))
-            yield DrugDescription(
+        yield DrugDescription(
                             url=response.url,
                             name=drug_name,
                             classification=classification,
@@ -72,7 +81,7 @@ class DrugsSpider(Spider):
     def parse_setof_pages(self, response):
         sel = Selector(response)
         all_another_pages = sel.xpath('//div[@class="paging"]//a[@class="paging__item"]/@href').extract() # Проверяем есть ли другие страницы
-        #print(response.url)
+        #print response.url
         all_another_pages.append(response.url)
         for page_link in all_another_pages:
             absolutely_page_link = page_link
@@ -82,7 +91,7 @@ class DrugsSpider(Spider):
 
     def parse(self, response):
         sel = Selector(response)
-        print("\n\nstart\n\n")#
+        #print "\n\nstart\n\n"#
         rubric_links = sel.xpath('//div[@class="hidden hidden_small"]//div[@class="catalog__rubric"]//@href').extract() # получаем локальные ссылки на тематику к которым принадлежат лекарства (91шт)
         for link in rubric_links:
             catalog_item_link = self.name_domain + link
