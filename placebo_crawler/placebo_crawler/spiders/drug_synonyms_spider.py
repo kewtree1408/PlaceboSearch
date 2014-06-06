@@ -26,7 +26,7 @@ class DrugSynonymsSpider(Spider):
                     synonyms = par[1].split(',')
                     for i in range(len(synonyms)):
                         synonyms[i] = synonyms[i].strip().strip('.')
-                    #synonyms = "|".join(synonyms)
+                    synonyms = "|".join(synonyms)
                     yield DrugSynonyms(url=response.url, name=name, synonyms=synonyms)
 
     def parse_letter(self, response):
