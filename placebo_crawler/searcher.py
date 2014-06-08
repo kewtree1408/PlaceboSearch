@@ -180,7 +180,7 @@ def build_rindex(db_text):
                     break
                 except Exception as ex:
                     print ex
-                    raise
+
 
     for t, ds in sorted(rindex2.items()):
         logger.debug(u"term = %s, ds = %s", t, str(ds))

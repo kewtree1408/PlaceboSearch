@@ -118,7 +118,7 @@ class DiseaseSpider(Spider):
         url_diseases = sel.xpath('//ul/li/a/@href').extract()
         for url in url_diseases:
             yield Request(url, callback=self.parse_disease)
-            time.sleep(5)
+            time.sleep(10)
             # break
 
     def parse(self, response):

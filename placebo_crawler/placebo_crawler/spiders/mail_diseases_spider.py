@@ -39,4 +39,4 @@ class DiseaseSpider(Spider):
         for url in url_rubrics:
             url = 'http://health.mail.ru/disease/' + url[9:]
             yield Request(url, callback=self.parse_rubric)
-            #time.sleep(5)
+            # return
