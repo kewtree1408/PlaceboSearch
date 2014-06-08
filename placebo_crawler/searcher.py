@@ -55,11 +55,12 @@ def profile(func):
 
 
 class DocStat2(object):
-    def __init__(self, item, text_id, labels, freq):
+    def __init__(self, item, text_id, labels, freq, posids, tags=None):
         self.doc_url = item['url'].lstrip('http://')
         self.freq = freq
-        # self.posids = list(posids)
+        self.posids = list(posids)
         self.labels = labels
+        self.tags = tags or []
         self.weight = 0
         self.text_id = text_id
         self.title = item['name']
@@ -79,6 +80,57 @@ class DocStat2(object):
 
     def __hash__(self):
         return hash(self.doc_url)
+
+    @classmethod
+    def join(cls, w_ds1, w_ds2):
+        w1, ds1 = w_ds1
+        w2, ds2 = w_ds2
+        posids = ds1.posids
+        text_id = ds1.text_id
+        if ds1.text_id == ds2.text_id:
+            posids = sorted(list(set(ds1.posids)|set(ds2.posids)))
+        elif len(ds2.posids) > (ds1.posids):
+            posids = ds2.posids
+            text_id = ds2.text_id
+        return w1 + w2, cls(
+            item={'url': ds1.doc_url, 'name': ds1.title},
+            text_id=text_id,
+            labels=sorted(list(set(ds1.labels)|set(ds2.labels))),
+            freq=ds1.freq+ds2.freq,
+            posids=posids
+        )
+
+    @classmethod
+    def intersection(cls, list1, list2):
+        list1 = sorted(list(list1), key=lambda x: hash(x))
+        list2 = sorted(list(list2), key=lambda x: hash(x))
+
+        if not list1:
+            return list2
+
+        if not list2:
+            return list1
+
+        result = list()
+        current1 = list1.pop()
+        current2 = list2.pop()
+        while list1 and list2:
+            if list1[0] == list2[0]:
+                result.append(cls.join(list1.pop(), list2.pop()))
+            elif hash(list1[0]) < hash(list2[0]):
+                result.append(list1.pop())
+            else:
+                result.append(list2.pop())
+
+        while list1:
+            result.append(list1.pop())
+
+        while list2:
+            result.append(list2.pop())
+
+        return result
+
+
 
 def is_punctuation(token):
     for punct in string.punctuation:
@@ -128,17 +180,17 @@ def get_terms(tokens):
     return terms
 
 
-@profile
+# @profile
 def update_rindex2(rindex, item, db_text, first_tag):
+    print "Adding url", item['url']
     tags = item.keys()
     for tag in tags:
         text = item['name'] + ' ' + item[tag]
         terms = get_terms(get_tokens(text))
+        text_id = db_text.insert({'text': text, 'url': item['url']})
         for trm in terms:
-            stats = terms[trm]
-            lbls = [first_tag, tag]
-            inserted = db_text.insert({'snippet': text, 'posids': stats[1]})
-            rindex[trm].append(DocStat2(item, str(inserted), lbls, stats[0]))
+            ds = DocStat2(item, text_id, [first_tag, tag], *terms[trm])
+            rindex[trm].append(ds)
 
 
 
@@ -190,7 +242,7 @@ def build_rindex(db_text):
     return dict(rindex2)
 
 
-@profile
+# @profile
 def get_index(ridx_fname, db_text):
     try:
         with open(ridx_fname, 'rb') as ribf:
@@ -198,9 +250,7 @@ def get_index(ridx_fname, db_text):
     except IOError as ex:
         # удаляем все данные из кеша-монги
         db_text.remove()
-        db_text.drop_indexes()
-        db_text.ensure_index('id')
-        db_text.ensure_index('snippet')
+        db_text.ensure_index('url')
 
         # строим индекс
         rindex = build_rindex(db_text)
@@ -223,7 +273,7 @@ def get_term_tf_idf(terms_q):
     return t_w
 
 
-@profile
+# @profile
 def get_tf_idf(query, ridx, labels=None):
     """
     Возвращает список из списков: [
@@ -236,7 +286,7 @@ def get_tf_idf(query, ridx, labels=None):
     labels = [] if labels is None else list(labels)
     terms_q = dict(get_terms(get_tokens(query)))
     q_docstats = dict()
-    N = sum([len(ridx.get(t,[])) for t in terms_q])
+    N = sum([len(ridx.get(t, [])) for t in terms_q])
     print N
     # схема tf-idf для терминов
     term_tf_idf = get_term_tf_idf(terms_q)
@@ -264,7 +314,7 @@ def get_tf_idf(query, ridx, labels=None):
         q_docstats[t] = heap_docstats
 
     if q_docstats:
-        intersection_ds = reduce(set.intersection, [set(q_docstats[t]) for t in q_docstats])
+        intersection_ds = reduce(DocStat2.intersection, q_docstats.values())
     q_sum = sum(term_tf_idf[t] for t in terms_q)
 
     if intersection_ds:
@@ -360,16 +410,25 @@ def get_tags(q):
     return str_clean_q, labels
 
 
-def snippet_by(ds, text, posids):
+def snippet_by(text, posids):
     SIZE_SNIPPET = 80
-    # if not isinstance(ds.posids, list):
-    #     ds.posids = list(ds.posids)
+    first_pos = posids[0]
+    for ws in string.whitespace + ''.join(['_', '*']):
+        text = text.replace(ws, ' ')
+    pos_begin = text.find(' ', abs(first_pos-SIZE_SNIPPET))
+    pos_end = text.find(' ', first_pos+SIZE_SNIPPET)
+    print pos_begin, pos_end
+    print text
+    result_s = ""
+    end_word = pos_begin
+    for p in posids:
+        if pos_begin < p < pos_end:
+            result_s += text[end_word:p]
+            end_word = text.find(' ', p)
+            result_s += text[p:end_word].upper()
+    result_s += text[end_word:pos_end]
 
-    pos1 = posids[0]
-    BORDER = 100
-
-    pos2 = text.find(' ', pos1)
-    return text[pos1-BORDER:pos1] + text[pos1:pos2].upper() + text[pos2:pos2+BORDER]
+    return '...'+result_s+'...'
 
 
 TRANSLATE_LBLs = {
@@ -388,39 +447,41 @@ TRANSLATE_LBLs = {
 }
 
 
-@profile
+# @profile
 def get_lst_snippet(lst_result, db_text, begin=0, end=0):
     snippet = list()
     for res in lst_result:
         weight = res[0]
         lst_ds = res[1]
         labels_set = set()
-        cur_ds = None
-        for ds in lst_ds:
-            for l in ds.labels:
+        ds = lst_ds[0]
+        for d in lst_ds:
+            # if len(d.posids) > len(ds.posids):
+                # ds = d
+            for l in d.labels:
                 labels_set.add(l)
-                cur_ds = ds
 
-        sn_labels = labels_set if labels_set else lst_ds[0].labels
+        sn_labels = labels_set if labels_set else ds.labels
         # print sn_labels
-        text_for_sn = db_text.find({'_id': ObjectId(cur_ds.text_id)})[0]
+        text_for_sn = db_text.find_one({'_id': ObjectId(ds.text_id)})
         # print cur_ds.text_id
         # if text_for_sn.count():
-        text = text_for_sn['snippet']
-        posids = text_for_sn['posids']
+        text = text_for_sn['text']
+        posids = sorted(list(reduce(lambda a, b: set(a) | set(b),
+                                    [d.posids for d in lst_ds if d.text_id == ds.text_id])))
         # else:
         #     raise
         print sn_labels
         labels = [TRANSLATE_LBLs.get(l.strip(), u'') for l in sn_labels]
         print labels
-        snippet += [{'url': cur_ds.doc_url,
-                        'domain': cur_ds.doc_url.split('/')[0],
+        snippet += [{'url': ds.doc_url,
+                        'domain': ds.doc_url.split('/')[0],
                         'labels': labels,
-                        'shorter': snippet_by(cur_ds, text, posids),
-                        'title': cur_ds.title}]
+                        'shorter': snippet_by(text, posids),
+                        'title': ds.title}]
     return snippet
 
-@profile
+# @profile
 def main():
     """
     query = u"сердечный спазм,симптомы; ; : противопоказания,,,"
@@ -444,23 +505,26 @@ def main():
     # Выясняем, насколько наш запрос соответствует документу
     ridx = get_index('rindex.pkl', db_text)
     res = finder(query, ridx)
-    print res
     snippets = get_lst_snippet(res, db_text)
-    # for snippet in snippets:
-    #     for l in snippet['labels']:
-    #         print l,
-    #     print snippet['shorter']
+    for snippet in snippets:
+        for l in snippet['labels']:
+            print repr(l)
+        if len(snippet['shorter']) > 200:
+            import ipdb; ipdb.set_trace()
+        print len(snippet['shorter'])
 
 
 class RIndex(object):
     def __init__(self):
         dbconnection = MongoClient('localhost', 27017)
         db = dbconnection['placebo']
+        db['queries'].remove()
         self.db_text = db['text_for_snippets']
         self.db_text.ensure_index('id')
         self.db_text.ensure_index('snippet')
 
     def get_ridx(self):
+
         return get_index('rindex.pkl', self.db_text)
 
 if __name__ == '__main__':
