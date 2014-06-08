@@ -5,7 +5,7 @@ import codecs
 import cPickle
 
 from scrapy.exceptions import DropItem
-from items import DiseaseDescription, DrugDescription
+from items import DiseaseDescription, DrugDescription, DrugSynonyms
 
 
 class JsonWriterPipeline(object):
@@ -21,6 +21,10 @@ class JsonWriterPipeline(object):
         self.drug_pkl = open('items_DRUG.pkl', 'a')
         self.disease_pkl = open('items_DISEASE.pkl', 'a')
 
+        self.drug_synonyms_file_txt = codecs.open('drug_synonyms.txt', encoding='utf8', mode='a')
+        self.drug_synonyms_file_txt.write("====================================================\n")
+        self.drug_synonyms_pkl = open('drug_synonyms.pkl', 'a')
+
 
     def process_item(self, item, spider):
         line = ''.join(['%s: %s\n' % (k, item[k]) for k in dict(item)])
@@ -31,6 +35,9 @@ class JsonWriterPipeline(object):
         elif isinstance(item, DiseaseDescription):
             fl_txt = self.disease_file_txt
             fl_pkl = self.disease_pkl
+        elif isinstance(item, DrugSynonyms):
+            fl_txt = self.drug_synonyms_file_txt
+            fl_pkl = self.drug_synonyms_pkl
         
         fl_txt.write(line)
         cPickle.dump(dict(item), fl_pkl)
