@@ -41,7 +41,6 @@ def index():
             page = 1
         cursor = search.last_queries.find({query: {"$exists": "true"}})
         n_p = 10
-        labels = [] # здесь будет реакция на слово-тег в запросе
         answers = []
         snippets = []
         if query:
@@ -49,7 +48,7 @@ def index():
                 snippets = cursor[0][query]
             else:
                 logging.debug("%s", RINDEX)
-                snippets = get_lst_snippet(finder(query, labels, RINDEX), labels, search.text_sn)
+                snippets = get_lst_snippet(finder(query, RINDEX), search.text_sn)
                 search.last_queries.insert({query: snippets})
             answers = snippets[(page-1)*n_p:(page-1)*n_p+n_p]
 

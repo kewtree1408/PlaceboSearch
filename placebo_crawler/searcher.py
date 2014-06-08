@@ -14,11 +14,13 @@ import pymorphy2
 from os.path import join
 
 from placebo_crawler.items import DrugDescription, DiseaseDescription
+from tag_items import TagItems
 
 from nltk import wordpunct_tokenize
 from nltk.stem.snowball import RussianStemmer
 from nltk.probability import LidstoneProbDist
 from nltk.model.ngram import NgramModel
+from nltk import wordpunct_tokenize
 from pymongo import MongoClient
 from heapq import heappush, heappop, nlargest
 from bson.objectid import ObjectId
@@ -317,14 +319,45 @@ def get_similarity(q, idx, tf_idf):
     return sorted(rank_lm, key=lambda ds: ds.weight)
 
 
-def finder(q, labels=None, ridx=None):
+def finder(q, ridx=None):
+    query, labels = get_tags(q)
     if ridx:
-        return get_tf_idf(q, ridx, labels)
+        return get_tf_idf(query, ridx, labels)
     return []
 
     # пока не понятно, убираем или оставляем похожесть и как ее учитывать?
     # sim = get_similarity(q, idx, tf_idf)
     # print sim
+
+# Ищем теги и удаляем их из запроса, отмечаем что встретился такой тег
+def get_tags(q):
+    #labels = ['drug', 'overdose']
+
+    labels = []
+    stem = lambda word: morph.parse(unicode(word))[0].normal_form  # rus_stemmer.stem(word)
+    all_labels = TagItems(stem).tags
+    words = wordpunct_tokenize(q)
+
+    clean_q = []
+
+    for word in words:  # разбиваем на слова из запроса
+        low_word = word.lower()
+        # term = rus_stemmer.stem(low_word)
+        term = morph.parse(unicode(low_word))[0].normal_form
+        if not is_punctuation(term):
+            is_label = False
+            for key, value in all_labels.iteritems():  # проходим по словарю тегов
+                for synonym in value: # проходим по списку синонимов тега
+                    if term == synonym:
+                        if not term in labels:
+                            labels.append(key)
+                            is_label = True
+            if not is_label:
+                if not word in clean_q:
+                    clean_q.append(word)
+
+    str_clean_q = ' '.join(clean_q)
+    return str_clean_q, labels
 
 
 def snippet_by(ds, text, posids):
@@ -356,7 +389,7 @@ TRANSLATE_LBLs = {
 
 
 @profile
-def get_lst_snippet(lst_result, out_labels, db_text, begin=0, end=0):
+def get_lst_snippet(lst_result, db_text, begin=0, end=0):
     snippet = list()
     for res in lst_result:
         weight = res[0]
@@ -389,8 +422,15 @@ def get_lst_snippet(lst_result, out_labels, db_text, begin=0, end=0):
 
 @profile
 def main():
+    """
+    query = u"сердечный спазм,симптомы; ; : противопоказания,,,"
+    #labels = ['drug', 'overdose']
+    #Выясняем, насколько наш запрос соответствует документу
+    finder(query)
+    """
     # при обновлении индекса, очищаем кеш запросов
     host, port = '0.0.0.0', 8007
+
     dbconnection = MongoClient('localhost', 27017)
     db = dbconnection['placebo']
     db['queries'].remove()
@@ -400,13 +440,12 @@ def main():
     # db_text.ensure_index('id')
     # db_text.ensure_index('snippet')
 
-    query = u"сердечный приступ"
-    labels = ['name', 'overdose']
+    query = u"сердечный спазм,симптомы; ; : противопоказания,,,"
     # Выясняем, насколько наш запрос соответствует документу
     ridx = get_index('rindex.pkl', db_text)
-    res = finder(query, labels, ridx)
+    res = finder(query, ridx)
     print res
-    snippets = get_lst_snippet(res, labels, db_text)
+    snippets = get_lst_snippet(res, db_text)
     # for snippet in snippets:
     #     for l in snippet['labels']:
     #         print l,
