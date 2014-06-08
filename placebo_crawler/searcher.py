@@ -21,6 +21,7 @@ from nltk.probability import LidstoneProbDist
 from nltk.model.ngram import NgramModel
 from pymongo import MongoClient
 from heapq import heappush, heappop, nlargest
+from bson.objectid import ObjectId
 
 
 from pprint import pprint
@@ -40,19 +41,19 @@ morph = pymorphy2.MorphAnalyzer()
 
 
 class DocStat2(object):
-    def __init__(self, item, labels, freq, posids):
+    def __init__(self, item, text_id, labels, freq):
         self.doc_url = item['url'].lstrip('http://')
         self.freq = freq
-        self.posids = list(posids)
+        # self.posids = list(posids)
         self.labels = labels
         self.weight = 0
-        # self.text = text
-        self.title = item['name'].replace('.', ' ')
+        self.text_id = text_id
+        self.title = item['name']
 
     def __str__(self):
-        posids = ''.join([str(p)+', ' for p in self.posids])
+        # posids = ''.join([str(p)+', ' for p in self.posids])
         labels = ''.join([str(l)+', ' for l in self.labels])
-        return u'%s: <%d(%f), [%s], [%s]>' % (self.doc_url, self.freq, self.weight, posids, labels)
+        return u'%s: <%d(%f), [%s]>' % (self.doc_url, self.freq, self.weight, labels)
 
     def __repr__(self):
         return str(self)
@@ -108,7 +109,7 @@ def get_terms(tokens):
         term = rus_stemmer.stem(t)
         freq, posids = terms[term]
         init_freq, init_posids = tokens[t]
-        terms[term] = init_freq + freq, sorted(init_posids + posids)
+        terms[term] = init_freq + freq, init_posids + posids
     return terms
 
 
@@ -118,11 +119,11 @@ def update_rindex2(rindex, item, db_text, first_tag):
         text = item[tag]
         terms = get_terms(get_tokens(text))
         for trm in terms:
+            stats = terms[trm]
             lbls = [first_tag, tag]
-            DS = DocStat2(item, lbls, *terms[trm])
-            rindex[trm] += [DS]
-            key = '%s_%s' % (DS.title, ''.join(lbls))
-            db_text.insert({key: text})
+            inserted = db_text.insert({'snippet': text, 'posids': stats[1]})
+            rindex[trm].append(DocStat2(item, str(inserted), lbls, stats[0]))
+
 
 
 # def update_index3(index, item, key_name='info'):
@@ -131,22 +132,22 @@ def update_rindex2(rindex, item, db_text, first_tag):
 #     index[ds.doc_url] = ds
 
 
-def update_index(rindex2, item, db_text, main_tag):
-    """
-    update rindex:
-    rindex = {
-        token1: [DocStat1, DocStat2, ..., DocStat_N],
-        token2: [DocStat1, DocStat2, ..., DocStat_M],
-        ...
-    }
-    """
+# def update_index(rindex2, item, db_text, main_tag):
+#     """
+#     update rindex:
+#     rindex = {
+#         token1: [DocStat1, DocStat2, ..., DocStat_N],
+#         token2: [DocStat1, DocStat2, ..., DocStat_M],
+#         ...
+#     }
+#     """
     # key_value = ''
     # if main_tag == 'drug':
     #     key_value = 'info'
     # elif main_tag == 'disease':
     #     key_value = 'description'
 
-    update_rindex2(rindex2, item, db_text, main_tag)
+    # update_rindex2(rindex2, item, db_text, main_tag)
 
 
 def build_rindex(db_text):
@@ -154,11 +155,12 @@ def build_rindex(db_text):
 
     for main_tag in ['DRUG', 'DISEASE']:
         fname = "items_%s.pkl" % main_tag
+        lower_main_tag = main_tag.lower()
         with open(fname, 'rb') as bf:
             while bf:
                 try:
                     obj = cPickle.load(bf)
-                    update_index(rindex2, obj, db_text, main_tag.lower())
+                    update_rindex2(rindex2, obj, db_text, lower_main_tag)
                 except EOFError as err:
                     print "end load"
                     break
@@ -166,8 +168,8 @@ def build_rindex(db_text):
                     print ex
                     raise
 
-    for t, ds in sorted(rindex2.items()):
-        logger.debug(u"term = %s, ds = %s", t, str(ds))
+    # for t, ds in sorted(rindex2.items()):
+    #     logger.debug(u"term = %s, ds = %s", t, str(ds))
 
     return dict(rindex2)
 
@@ -176,22 +178,17 @@ def get_index(ridx_fname, db_text):
         with open(ridx_fname, 'rb') as ribf:
             rindex = cPickle.load(ribf)
     except IOError as ex:
+        # удаляем все данные из кеша-монги
+        db_text.remove()
+        db_text.drop_indexes()
+        db_text.ensure_index('id')
+        db_text.ensure_index('snippet')
+
+        # строим индекс
         rindex = build_rindex(db_text)
         with open(ridx_fname, 'wb') as ribf:
             cPickle.dump(rindex, ribf)
     return rindex
-
-
-# def finder(q, ridx):
-#     terms_q = dict(get_terms(get_tokens(q)))
-#     rank = dict()
-#     for t in terms_q:
-#         rank[t] = sorted([docstat for docstat in ridx.get(t, [])], key=lambda ds: 1 + log(ds.freq))
-#         print t
-#         print rank[t]
-#     # пересечение координатных блоков через intersection
-#     res = reduce(set.intersection, [set(rank[r]) for r in rank])
-#     print res
 
 
 def get_term_tf_idf(terms_q):
@@ -236,6 +233,8 @@ def get_tf_idf(query, ridx, labels=None):
         for ds in all_terms_ridx:
             ds.weight = (1.0+log(ds.freq))*idf
             #  учитываем метки
+            if 'name' in ds.labels:
+                ds.weight += 2*UP_WEIGHT
             for label in labels:
                 if label in ds.labels:
                     ds.weight += UP_WEIGHT
@@ -290,7 +289,6 @@ def get_similarity(q, idx, tf_idf):
     est = lambda fdist, bins: LidstoneProbDist(fdist, 0.2)
     q_sequence = wordpunct_tokenize(q)
     for doc_url in urls_for_sim:
-        ds = idx[doc_url]
         text = ds.text
         sequence = wordpunct_tokenize(text)
         lm = NgramModel(3, sequence, estimator=est)
@@ -311,12 +309,12 @@ def finder(q, labels=None, ridx=None):
     # print sim
 
 
-def snippet_by(ds, text):
+def snippet_by(ds, text, posids):
     SIZE_SNIPPET = 80
-    if not isinstance(ds.posids, list):
-        ds.posids = list(ds.posids)
+    # if not isinstance(ds.posids, list):
+    #     ds.posids = list(ds.posids)
 
-    pos1 = ds.posids[0]
+    pos1 = posids[0]
     BORDER = 100
 
     pos2 = text.find(' ', pos1)
@@ -352,20 +350,19 @@ def get_lst_snippet(lst_result, out_labels, db_text, begin=0, end=-1):
 
         sn_labels = labels_set if labels_set else lst_ds[0].labels
         print sn_labels
-        key = "%s_%s" % (cur_ds.title, ''.join(cur_ds.labels))
-        print key
-        text = db_text.find({key: {"$exists": "true"}})
-        print text.count()
-        if text.count() > 0:
-            text = text[0][key]
-            print text
+        text_for_sn = db_text.find({'_id': ObjectId(cur_ds.text_id)})
+        print cur_ds.text_id
+        if text_for_sn.count():
+            text = text_for_sn[0]['snippet']
+            posids = text_for_sn[0]['posids']
         else:
             raise
+
         labels = [TRANSLATE_LBLs.get(l.strip(), u'') for l in sn_labels]
         snippet.append({'url': cur_ds.doc_url,
                         'domain': cur_ds.doc_url.split('/')[0],
                         'labels': labels,
-                        'shorter': snippet_by(cur_ds, text),
+                        'shorter': snippet_by(cur_ds, text, posids),
                         'title': cur_ds.title})
     return snippet
 
@@ -382,9 +379,11 @@ def main():
     labels = ['contra', 'overdose']
     # Выясняем, насколько наш запрос соответствует документу
     ridx = get_index('rindex.pkl', db_text)
+    print "END LOAD"
+    return
     res = finder(query, labels, ridx)
 
-    snippets = get_lst_snippet(res, labels, db_text, 1, 2)
+    snippets = get_lst_snippet(res, labels, db_text)
     for snippet in snippets:
         for l in snippet['labels']:
             print l,
@@ -392,10 +391,12 @@ def main():
 
 
 class RIndex(object):
-    dbconnection = MongoClient('localhost', 27017)
-    db = dbconnection['placebo']
-    db_text = db['text_for_snippets']
-    # db_text.ensureIndex( { userid: 1 } )
+    def __init__(self):
+        dbconnection = MongoClient('localhost', 27017)
+        db = dbconnection['placebo']
+        self.db_text = db['text_for_snippets']
+        self.db_text.ensure_index('id')
+        self.db_text.ensure_index('snippet')
 
     def get_ridx(self):
         return get_index('rindex.pkl', self.db_text)
