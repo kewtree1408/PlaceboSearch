@@ -21,7 +21,7 @@ class DrugDescription(Item):
     contra = Field()
     side = Field()
     overdose = Field()
-    info = Field()
+    # info = Field()
 
 
 class DiseaseDescription(Item):

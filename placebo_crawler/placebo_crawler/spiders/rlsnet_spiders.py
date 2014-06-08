@@ -128,3 +128,6 @@ class DiseaseSpider(Spider):
         for url in url_letters:
             yield Request(url, callback=self.parse_letter)
             time.sleep(5)
+            i += 1
+            if i > 5:
+               return

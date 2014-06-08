@@ -63,7 +63,7 @@ class DrugsSpider(Spider):
                                 contra=contra,
                                 side=side,
                                 overdose=overdose,
-                                info=html2text(context),
+                                # info=html2text(context),
                             )
 
     def parse_letter(self, response):
@@ -81,6 +81,6 @@ class DrugsSpider(Spider):
             root_url = 'http://slovari.yandex.ru' + url
             print root_url
             yield Request(root_url, callback=self.parse_letter)
-            p += 1
-            if p > 2:
-                break
+            # p += 1
+            # if p > 4:
+            #     break
