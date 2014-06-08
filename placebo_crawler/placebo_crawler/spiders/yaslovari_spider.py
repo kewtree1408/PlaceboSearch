@@ -63,7 +63,7 @@ class DrugsSpider(Spider):
                                 contra=contra,
                                 side=side,
                                 overdose=overdose,
-                                info=html2text(context),
+                                # info=html2text(context),
                             )
 
     def parse_letter(self, response):

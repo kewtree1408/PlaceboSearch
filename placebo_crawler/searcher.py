@@ -27,7 +27,7 @@ from bson.objectid import ObjectId
 from pprint import pprint
 from math import log, sqrt
 
-rus_stemmer = RussianStemmer()
+# rus_stemmer = RussianStemmer()
 
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
@@ -38,6 +38,18 @@ fh.setFormatter(formatter)
 logger.addHandler(fh)
 
 morph = pymorphy2.MorphAnalyzer()
+
+
+import cProfile
+def profile(func):
+    """Decorator for run function profile"""
+    def wrapper(*args, **kwargs):
+        profile_filename = func.__name__ + '.prof'
+        profiler = cProfile.Profile()
+        result = profiler.runcall(func, *args, **kwargs)
+        profiler.dump_stats(profile_filename)
+        return result
+    return wrapper
 
 
 class DocStat2(object):
@@ -106,17 +118,19 @@ def get_tokens(text):
 def get_terms(tokens):
     terms = collections.defaultdict(lambda: (0, list())) # {'term': (freq(int), posids(list))}
     for t in tokens:
-        term = rus_stemmer.stem(t)
+        # term = rus_stemmer.stem(t)
+        term = morph.parse(unicode(t))[0].normal_form
         freq, posids = terms[term]
         init_freq, init_posids = tokens[t]
         terms[term] = init_freq + freq, init_posids + posids
     return terms
 
 
+@profile
 def update_rindex2(rindex, item, db_text, first_tag):
     tags = item.keys()
     for tag in tags:
-        text = item[tag]
+        text = item['name'] + ' ' + item[tag]
         terms = get_terms(get_tokens(text))
         for trm in terms:
             stats = terms[trm]
@@ -168,11 +182,13 @@ def build_rindex(db_text):
                     print ex
                     raise
 
-    # for t, ds in sorted(rindex2.items()):
-    #     logger.debug(u"term = %s, ds = %s", t, str(ds))
+    for t, ds in sorted(rindex2.items()):
+        logger.debug(u"term = %s, ds = %s", t, str(ds))
 
     return dict(rindex2)
 
+
+@profile
 def get_index(ridx_fname, db_text):
     try:
         with open(ridx_fname, 'rb') as ribf:
@@ -205,6 +221,7 @@ def get_term_tf_idf(terms_q):
     return t_w
 
 
+@profile
 def get_tf_idf(query, ridx, labels=None):
     """
     Возвращает список из списков: [
@@ -239,10 +256,10 @@ def get_tf_idf(query, ridx, labels=None):
                 if label in ds.labels:
                     ds.weight += UP_WEIGHT
             ds.weight *= term_tf_idf[t]
-            # heappush(heap_docstats, (ds.weight, ds))
-        docstats = sorted([docstat for docstat in all_terms_ridx], key=lambda docst: docst.weight)
+            heappush(heap_docstats, (ds.weight, ds))
+        # docstats = sorted([docstat for docstat in all_terms_ridx], key=lambda docst: docst.weight)
 
-        q_docstats[t] = docstats
+        q_docstats[t] = heap_docstats
 
     if q_docstats:
         intersection_ds = reduce(set.intersection, [set(q_docstats[t]) for t in q_docstats])
@@ -253,26 +270,27 @@ def get_tf_idf(query, ridx, labels=None):
             dq_sum = 0.0
             d_sum = 0.0
             qi = term_tf_idf[t]
-            for ds in intersection_ds:
-                if ds.doc_url in [docst.doc_url for docst in q_docstats[t]]:
+            for _, ds in intersection_ds:
+                if ds.doc_url in [docst.doc_url for _, docst in q_docstats[t]]:
                     dq_sum += ds.weight*qi
                     d_sum += ds.weight
             if not d_sum: continue
-            for ds in intersection_ds:
+            for _, ds in intersection_ds:
                 cos_dq = dq_sum/(sqrt(d_sum)*sqrt(q_sum))
                 ds.weight = cos_dq
                 print cos_dq
 
     rank = collections.defaultdict(lambda: [0, list()])
-    for ds in intersection_ds:
+    for _, ds in intersection_ds:
         rank[ds.doc_url][0] += ds.weight
         rank[ds.doc_url][1] += [ds]
     for t in q_docstats:
-        for ds in q_docstats[t]:
-            if ds.doc_url not in [fds.doc_url for fds in intersection_ds]:
-                rank[ds.doc_url][0] += ds.weight
+        while q_docstats[t]:
+            w, ds = heappop(heap_docstats)
+            if ds.doc_url not in [fds.doc_url for _, fds in intersection_ds]:
+                rank[ds.doc_url][0] += w
                 rank[ds.doc_url][1] += [ds]
-
+    # print rank
     return sorted([rank[d] for d in rank], key=lambda ds: ds[0], reverse=True)
 
 
@@ -332,41 +350,44 @@ TRANSLATE_LBLs = {
     'overdose': u'передозировка',
     'name': u'название',
     'disease': u'заболевание',
+    'title': u'название',
+    'info': u'описание',
 }
 
 
-def get_lst_snippet(lst_result, out_labels, db_text, begin=0, end=-1):
-    snippet = []
-    for res in lst_result[begin:end]:
+@profile
+def get_lst_snippet(lst_result, out_labels, db_text, begin=0, end=0):
+    snippet = list()
+    for res in lst_result:
         weight = res[0]
         lst_ds = res[1]
         labels_set = set()
         cur_ds = None
         for ds in lst_ds:
             for l in ds.labels:
-                if l in out_labels:
-                    labels_set.add(l)
+                labels_set.add(l)
                 cur_ds = ds
 
         sn_labels = labels_set if labels_set else lst_ds[0].labels
+        # print sn_labels
+        text_for_sn = db_text.find({'_id': ObjectId(cur_ds.text_id)})[0]
+        # print cur_ds.text_id
+        # if text_for_sn.count():
+        text = text_for_sn['snippet']
+        posids = text_for_sn['posids']
+        # else:
+        #     raise
         print sn_labels
-        text_for_sn = db_text.find({'_id': ObjectId(cur_ds.text_id)})
-        print cur_ds.text_id
-        if text_for_sn.count():
-            text = text_for_sn[0]['snippet']
-            posids = text_for_sn[0]['posids']
-        else:
-            raise
-
         labels = [TRANSLATE_LBLs.get(l.strip(), u'') for l in sn_labels]
-        snippet.append({'url': cur_ds.doc_url,
+        print labels
+        snippet += [{'url': cur_ds.doc_url,
                         'domain': cur_ds.doc_url.split('/')[0],
                         'labels': labels,
                         'shorter': snippet_by(cur_ds, text, posids),
-                        'title': cur_ds.title})
+                        'title': cur_ds.title}]
     return snippet
 
-
+@profile
 def main():
     # при обновлении индекса, очищаем кеш запросов
     host, port = '0.0.0.0', 8007
@@ -374,20 +395,22 @@ def main():
     db = dbconnection['placebo']
     db['queries'].remove()
     db_text = db['text_for_snippets']
+    # db_text.drop_indexes()
+    # db_text.remove()
+    # db_text.ensure_index('id')
+    # db_text.ensure_index('snippet')
 
     query = u"сердечный приступ"
-    labels = ['contra', 'overdose']
+    labels = ['name', 'overdose']
     # Выясняем, насколько наш запрос соответствует документу
     ridx = get_index('rindex.pkl', db_text)
-    print "END LOAD"
-    return
     res = finder(query, labels, ridx)
-
+    print res
     snippets = get_lst_snippet(res, labels, db_text)
-    for snippet in snippets:
-        for l in snippet['labels']:
-            print l,
-        print snippet['shorter']
+    # for snippet in snippets:
+    #     for l in snippet['labels']:
+    #         print l,
+    #     print snippet['shorter']
 
 
 class RIndex(object):
