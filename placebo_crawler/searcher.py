@@ -25,6 +25,7 @@ from pymongo import MongoClient
 from heapq import heappush, heappop, nlargest
 from bson.objectid import ObjectId
 
+# from memory_profiler import profile
 
 from pprint import pprint
 from math import log, sqrt

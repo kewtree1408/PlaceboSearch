@@ -87,6 +87,6 @@ class DrugsSpider(Spider):
             root_url = 'http://slovari.yandex.ru' + url
             print root_url
             yield Request(root_url, callback=self.parse_letter)
-            p += 1
-            if p > 2:
-                break
+            # p += 1
+            # if p > 2:
+            #     break
