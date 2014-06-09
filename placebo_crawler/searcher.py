@@ -103,8 +103,6 @@ class DocStat2(object):
             return list1
 
         result = list()
-        current1 = list1.pop()
-        current2 = list2.pop()
         while list1 and list2:
             if list1[0] == list2[0]:
                 result.append(cls.join(list1.pop(), list2.pop()))
@@ -123,9 +121,9 @@ class DocStat2(object):
 
 
 
-def is_punctuation(token):
-    for punct in string.punctuation:
-        if punct in token:
+def is_punctuation(token, punctuation=set(string.punctuation)):
+    for char in token:
+        if char in punctuation:
             return True
     return False
 
@@ -133,29 +131,27 @@ def is_punctuation(token):
 # POS - parst of speech - опредление части речи для русского языка
 # с помощью библиотеки: http://pymorphy2.readthedocs.org/en/master/user/guide.html
 def custom_pos_tag(token):
-    global morph
     p = morph.parse(unicode(token))[0]
     return p.tag.POS
 
 
 # второстепенные части речи: предлог, междометие, союз, частица, местоимение
-def is_minorPOS(token):
-    if custom_pos_tag(token) in [u'PREP', u'INTJ', u'CONJ', u'PRCL', u'NPRO']:
+def is_minorPOS(token, minors=set([u'PREP', u'INTJ', u'CONJ', u'PRCL', u'NPRO'])):
+    if custom_pos_tag(token) in minors:
         return True
     return False
 
 
 # получаем уникальные токены для текущего документа
 def get_tokens(text):
-    tokens = collections.defaultdict(lambda: (0, list()))  # {'token': (freq(int), posids(list))}
+    tokens = collections.defaultdict(lambda: [0, list()])  # {'token': (freq(int), posids(list))}
     pos = 0
     for t in wordpunct_tokenize(text):
         if not is_punctuation(t) and not is_minorPOS(t):
             t_pos = text.find(t, pos)
             pos = t_pos if t_pos != -1 else pos
-            freq, posids = tokens[t]
-            tokens[t] = freq + 1, posids + [pos]
-
+            tokens[t][0] += 1  # freq + 1
+            tokens[t][1].append(pos)  # posids + [pos]
     return tokens
 
 
@@ -174,15 +170,13 @@ def get_terms(tokens):
 # @profile
 def term_ds_from_item(item, db_text, first_tag):
     print "Adding url", item['url']
-    tags = item.keys()
-    for tag in tags:
+    for tag in item:
         text = ' ' + item['name'] + ' ' + item[tag]
         terms = get_terms(get_tokens(text))
         text_id = db_text.insert({'text': text, 'url': item['url'], 'title': item['name']})
         for term in terms:
             ds = DocStat2(text_id, [first_tag, tag], *terms[term])
             yield term, ds
-
 
 
 def build_rindex(db_text):
@@ -484,17 +478,26 @@ def main():
         print len(snippet['shorter'])
 
 
-class RIndex(object):
-    def __init__(self):
-        dbconnection = MongoClient('localhost', 27017)
-        db = dbconnection['placebo']
-        db['queries'].remove()
-        self.db_text = db['text_for_snippets']
-        self.db_text.ensure_index('id')
-        self.db_text.ensure_index('snippet')
+class Singleton(object):
+    _instances = {}
+    def __new__(class_, *args, **kwargs):
+        if class_ not in class_._instances:
+            class_._instances[class_] = super(Singleton, class_).__new__(class_, *args, **kwargs)
+        return class_._instances[class_]
 
-    def get_ridx(self):
-        return get_index('rindex.pkl', self.db_text)
+
+def set_db():
+    dbconnection = MongoClient('localhost', 27017)
+    db = dbconnection['placebo']
+    db['queries'].remove()
+    db_text = db['text_for_snippets']
+    db_text.ensure_index('id')
+    db_text.ensure_index('snippet')
+    return db_text
+
+
+# RINDEX = get_index('rindex.pkl', set_db())
+
 
 if __name__ == '__main__':
     main()
