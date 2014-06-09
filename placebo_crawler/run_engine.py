@@ -3,7 +3,7 @@
 
 from flask import Flask, Blueprint, render_template, jsonify, redirect, url_for, current_app, flash, request
 from search_engine.utils import build_pager_big
-from searcher import finder, get_lst_snippet, get_index, DocStat2
+from searcher import finder, get_lst_snippet, DocStat2
 from searcher import RIndex
 import simplejson
 import traceback

@@ -25,7 +25,7 @@ from pymongo import MongoClient
 from heapq import heappush, heappop, nlargest
 from bson.objectid import ObjectId
 
-# from memory_profiler import profile
+from memory_profiler import profile
 
 from pprint import pprint
 from math import log, sqrt
@@ -44,43 +44,34 @@ morph = pymorphy2.MorphAnalyzer()
 
 
 import cProfile
-def profile(func):
-    """Decorator for run function profile"""
-    def wrapper(*args, **kwargs):
-        profile_filename = func.__name__ + '.prof'
-        profiler = cProfile.Profile()
-        result = profiler.runcall(func, *args, **kwargs)
-        profiler.dump_stats(profile_filename)
-        return result
-    return wrapper
+# def profile(func):
+#     """Decorator for run function profile"""
+#     def wrapper(*args, **kwargs):
+#         profile_filename = func.__name__ + '.prof'
+#         profiler = cProfile.Profile()
+#         result = profiler.runcall(func, *args, **kwargs)
+#         profiler.dump_stats(profile_filename)
+#         return result
+#     return wrapper
 
 
 class DocStat2(object):
-    def __init__(self, item, text_id, labels, freq, posids, tags=None):
-        self.doc_url = item['url'].lstrip('http://')
+    def __init__(self, text_id, labels, freq, posids):
         self.freq = freq
         self.posids = list(posids)
         self.labels = labels
-        self.tags = tags or []
         self.weight = 0
         self.text_id = text_id
-        self.title = item['name']
 
     def __str__(self):
-        # posids = ''.join([str(p)+', ' for p in self.posids])
         labels = ''.join([str(l)+', ' for l in self.labels])
-        return u'%s: <%d(%f), [%s]>' % (self.doc_url, self.freq, self.weight, labels)
+        return u'<%d(%f), [%s]>' % (self.freq, self.weight, labels)
 
     def __repr__(self):
         return str(self)
 
-    def __eq__(self, ds):
-        if self.doc_url == ds.doc_url:
-            return True
-        return False
-
     def __hash__(self):
-        return hash(self.doc_url)
+        return hash(self.text_id)
 
     @classmethod
     def join(cls, w_ds1, w_ds2):
@@ -94,7 +85,6 @@ class DocStat2(object):
             posids = ds2.posids
             text_id = ds2.text_id
         return w1 + w2, cls(
-            item={'url': ds1.doc_url, 'name': ds1.title},
             text_id=text_id,
             labels=sorted(list(set(ds1.labels)|set(ds2.labels))),
             freq=ds1.freq+ds2.freq,
@@ -182,46 +172,21 @@ def get_terms(tokens):
 
 
 # @profile
-def update_rindex2(rindex, item, db_text, first_tag):
+def term_ds_from_item(item, db_text, first_tag):
     print "Adding url", item['url']
     tags = item.keys()
     for tag in tags:
         text = ' ' + item['name'] + ' ' + item[tag]
         terms = get_terms(get_tokens(text))
-        text_id = db_text.insert({'text': text, 'url': item['url']})
-        for trm in terms:
-            ds = DocStat2(item, text_id, [first_tag, tag], *terms[trm])
-            rindex[trm].append(ds)
+        text_id = db_text.insert({'text': text, 'url': item['url'], 'title': item['name']})
+        for term in terms:
+            ds = DocStat2(text_id, [first_tag, tag], *terms[term])
+            yield term, ds
 
-
-
-# def update_index3(index, item, key_name='info'):
-#     text = item[key_name]
-#     ds = DocStat3(item, text)
-#     index[ds.doc_url] = ds
-
-
-# def update_index(rindex2, item, db_text, main_tag):
-#     """
-#     update rindex:
-#     rindex = {
-#         token1: [DocStat1, DocStat2, ..., DocStat_N],
-#         token2: [DocStat1, DocStat2, ..., DocStat_M],
-#         ...
-#     }
-#     """
-    # key_value = ''
-    # if main_tag == 'drug':
-    #     key_value = 'info'
-    # elif main_tag == 'disease':
-    #     key_value = 'description'
-
-    # update_rindex2(rindex2, item, db_text, main_tag)
 
 
 def build_rindex(db_text):
-    rindex2 = collections.defaultdict(lambda: list())
-
+    rindex = dict()
     for main_tag in ['DRUG', 'DISEASE']:
         fname = "items_%s.pkl" % main_tag
         lower_main_tag = main_tag.lower()
@@ -229,18 +194,19 @@ def build_rindex(db_text):
             while bf:
                 try:
                     obj = cPickle.load(bf)
-                    update_rindex2(rindex2, obj, db_text, lower_main_tag)
+                    for term, ds in term_ds_from_item(obj, db_text, lower_main_tag):
+                        if term not in rindex:
+                            rindex[term] = list()
+                        rindex[term].append(ds)
                 except EOFError as err:
                     print "end load"
                     break
-                except Exception as ex:
-                    print ex
 
+    # for t, ds in sorted(rindex.items()):
+    #     logger.debug(u"term = %s, ds = %s", t, str(ds))
+    logger.info("Index built, %d items", len(rindex))
 
-    for t, ds in sorted(rindex2.items()):
-        logger.debug(u"term = %s, ds = %s", t, str(ds))
-
-    return dict(rindex2)
+    return rindex
 
 
 # @profile
@@ -248,6 +214,7 @@ def get_index(ridx_fname, db_text):
     try:
         with open(ridx_fname, 'rb') as ribf:
             rindex = cPickle.load(ribf)
+            print "END load cpickle"
     except IOError as ex:
         # удаляем все данные из кеша-монги
         db_text.remove()
@@ -324,7 +291,7 @@ def get_tf_idf(query, ridx, labels=None):
             d_sum = 0.0
             qi = term_tf_idf[t]
             for _, ds in intersection_ds:
-                if ds.doc_url in [docst.doc_url for _, docst in q_docstats[t]]:
+                if ds.text_id in [docst.text_id for _, docst in q_docstats[t]]:
                     dq_sum += ds.weight*qi
                     d_sum += ds.weight
             if not d_sum: continue
@@ -335,14 +302,14 @@ def get_tf_idf(query, ridx, labels=None):
 
     rank = collections.defaultdict(lambda: [0, list()])
     for _, ds in intersection_ds:
-        rank[ds.doc_url][0] += ds.weight
-        rank[ds.doc_url][1] += [ds]
+        rank[ds.text_id][0] += ds.weight
+        rank[ds.text_id][1] += [ds]
     for t in q_docstats:
         while q_docstats[t]:
             w, ds = heappop(heap_docstats)
-            if ds.doc_url not in [fds.doc_url for _, fds in intersection_ds]:
-                rank[ds.doc_url][0] += w
-                rank[ds.doc_url][1] += [ds]
+            if ds.text_id not in [fds.text_id for _, fds in intersection_ds]:
+                rank[ds.text_id][0] += w
+                rank[ds.text_id][1] += [ds]
     # print rank
     return sorted([rank[d] for d in rank], key=lambda ds: ds[0], reverse=True)
 
@@ -354,12 +321,12 @@ def get_similarity(q, idx, tf_idf):
         weight = info[0]
         ds2_lst = info[1]
         for ds in ds2_lst:
-            urls_for_sim.add(ds.doc_url)
+            urls_for_sim.add(ds.text_id)
 
     rank_lm = []
     est = lambda fdist, bins: LidstoneProbDist(fdist, 0.2)
     q_sequence = wordpunct_tokenize(q)
-    for doc_url in urls_for_sim:
+    for text_id in urls_for_sim:
         text = ds.text
         sequence = wordpunct_tokenize(text)
         lm = NgramModel(3, sequence, estimator=est)
@@ -468,6 +435,8 @@ def get_lst_snippet(lst_result, db_text, begin=0, end=0):
         # print cur_ds.text_id
         # if text_for_sn.count():
         text = text_for_sn['text']
+        url = text_for_sn['url']
+        title = text_for_sn['title']
         posids = sorted(list(reduce(lambda a, b: set(a) | set(b),
                                     [d.posids for d in lst_ds if d.text_id == ds.text_id])))
         # else:
@@ -475,11 +444,11 @@ def get_lst_snippet(lst_result, db_text, begin=0, end=0):
         print sn_labels
         labels = [TRANSLATE_LBLs.get(l.strip(), u'') for l in sn_labels]
         print labels
-        snippet += [{'url': ds.doc_url,
-                        'domain': ds.doc_url.split('/')[0],
+        snippet += [{'url': url,
+                        'domain': url.split('/')[0],
                         'labels': labels,
                         'shorter': snippet_by(text, posids),
-                        'title': ds.title}]
+                        'title': title}]
     return snippet
 
 # @profile
@@ -510,7 +479,7 @@ def main():
     for snippet in snippets:
         for l in snippet['labels']:
             print repr(l)
-        if len(snippet['shorter']) > 200:
+        if len(snippet['shorter']) > 300:
             import ipdb; ipdb.set_trace()
         print len(snippet['shorter'])
 
@@ -525,7 +494,6 @@ class RIndex(object):
         self.db_text.ensure_index('snippet')
 
     def get_ridx(self):
-
         return get_index('rindex.pkl', self.db_text)
 
 if __name__ == '__main__':
