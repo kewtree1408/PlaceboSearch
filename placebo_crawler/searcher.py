@@ -185,7 +185,7 @@ def update_rindex2(rindex, item, db_text, first_tag):
     print "Adding url", item['url']
     tags = item.keys()
     for tag in tags:
-        text = item['name'] + ' ' + item[tag]
+        text = ' ' + item['name'] + ' ' + item[tag]
         terms = get_terms(get_tokens(text))
         text_id = db_text.insert({'text': text, 'url': item['url']})
         for trm in terms:

@@ -67,11 +67,17 @@ class DrugsSpider(Spider):
                             )
 
     def parse_letter(self, response):
+        PREFIX = 'http://slovari.yandex.ru'
         sel = Selector(response)
         url_drugs = sel.xpath('//h3[@class="b-serp-item__title"]/a/@href').extract()
         for url in url_drugs:
-            root_url = 'http://slovari.yandex.ru' + url
+            root_url = PREFIX + url
             yield Request(root_url, callback=self.parse_drug)
+            next_url = sel.xpath('//a[@class="b-pager__next ajax"]/@href').extract()
+            if next_url:
+                next_url_active = PREFIX + next_url[0]
+                print next_url_active
+                yield Request(next_url_active, callback=self.parse_letter)
 
     def parse(self, response):
         sel = Selector(response)
@@ -81,4 +87,6 @@ class DrugsSpider(Spider):
             root_url = 'http://slovari.yandex.ru' + url
             print root_url
             yield Request(root_url, callback=self.parse_letter)
-            
+            p += 1
+            if p > 2:
+                break
