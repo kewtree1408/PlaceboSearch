@@ -2,7 +2,7 @@
 
 {% macro get_url_for_page(page_num) -%}
     {% if query != "" %}
-        {{ url_for("index", p=page_num, q=query, fm=fm) }}
+        {{ url_for("index", p=page_num, q=query) }}
     {% else %}
         {% if page_num <= 1 %}
             {{ url_for("index") }}

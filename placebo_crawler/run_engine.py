@@ -1,6 +1,7 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import cPickle as pickle
 from flask import g, Flask, Blueprint, render_template, jsonify, redirect, url_for, current_app, flash, request
 from search_engine.utils import build_pager_big
 from searcher import finder, get_lst_snippet, DocStat2, get_index
@@ -34,19 +35,22 @@ def index():
     page = int(request.args.get("p", "1"))
     if page < 1:
         page = 1
-    cursor = search.last_queries.find({query: {"$exists": "true"}})
+    cached = search.last_queries.find_one({"query": query, "page": page})
     n_p = 10
     answers = []
     snippets = []
+    res_rank = []
     if query:
-        if cursor.count() > 0:
-            snippets = cursor[0][query]
+        if cached:
+            res_rank = pickle.loads(cached['result'].encode('utf8'))
         else:
-            snippets = get_lst_snippet(finder(query, rindex), search.text_sn)
-            search.last_queries.insert({query: snippets})
-        answers = snippets[(page-1)*n_p:(page-1)*n_p+n_p]
+            res_rank = finder(query, rindex)
+            # logging.debug("res_rank => %r", res_rank)
+            search.last_queries.insert({"query": query, "result": pickle.dumps(res_rank), "page": page})
+        answers = get_lst_snippet(res_rank, search.text_sn, (page-1)*n_p, (page-1)*n_p+n_p)
+        # answers = snippets[]
 
-    total = len(snippets)
+    total = len(res_rank)
     pages = total / n_p + (1 if total % n_p else 0)
     pager = build_pager_big(pages, page, n_p+2)
     return render_template('index.html', page=page, pages=pages, pager=pager,
