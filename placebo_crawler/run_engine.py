@@ -4,7 +4,7 @@
 import cPickle as pickle
 from flask import g, Flask, Blueprint, render_template, jsonify, redirect, url_for, current_app, flash, request
 from search_engine.utils import build_pager_big
-from searcher import finder, get_lst_snippet, DocStat2, get_index
+from searcher import finder, get_lst_snippet, DocStat2, get_index, load_synonyms
 import simplejson
 import traceback
 import logging
@@ -26,11 +26,12 @@ search.db['queries'].remove()
 search.last_queries = search.db['queries']
 search.text_sn = search.db['text_for_snippets']
 search.rindex = get_index('rindex.pkl', search.text_sn)
-
+search.synonyms = load_synonyms()
 
 @search.route('/')
 def index():
     rindex = search.rindex
+    synoms = search.synonyms
     query = request.args.get("q", "").strip().lower().strip()
     page = int(request.args.get("p", "1"))
     if page < 1:
@@ -39,22 +40,23 @@ def index():
     n_p = 10
     answers = []
     snippets = []
+    replace_s = ''
     res_rank = []
     if query:
         if cached:
             res_rank = pickle.loads(cached['result'].encode('utf8'))
         else:
-            res_rank = finder(query, rindex)
+            res_rank = finder(query, rindex, synoms)
             # logging.debug("res_rank => %r", res_rank)
             search.last_queries.insert({"query": query, "result": pickle.dumps(res_rank), "page": page})
-        answers = get_lst_snippet(res_rank, search.text_sn, (page-1)*n_p, (page-1)*n_p+n_p)
+        answers, replace_s = get_lst_snippet(res_rank, search.text_sn, (page-1)*n_p, (page-1)*n_p+n_p)
         # answers = snippets[]
 
     total = len(res_rank)
     pages = total / n_p + (1 if total % n_p else 0)
     pager = build_pager_big(pages, page, n_p+2)
     return render_template('index.html', page=page, pages=pages, pager=pager,
-                           answers=answers, query=query, found=total)
+                           answers=answers, query=query, found=total, replace=replace_s)
 
 
 if __name__ == "__main__":

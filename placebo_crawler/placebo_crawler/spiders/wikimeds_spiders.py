@@ -135,7 +135,7 @@ class DiseaseSpider(Spider):
     Crawler for http://www.wiki-meds.ru/zabolevaniya-alpha
     """
 
-    name = 'Mozilla/5.0 wikimeds_diseases'
+    name = 'wikimeds_diseases'
     allowed_domains = ['wiki-meds.ru']
     #download_delay = 2
     #handle_httpstatus_list = [302]

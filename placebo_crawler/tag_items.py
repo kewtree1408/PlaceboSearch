@@ -16,7 +16,7 @@ class TagItems(object):
         self.tags['drug'] = [stem(u'лекарство')]
 
         # Болезнь
-        self.tags['disease'] = [stem(u'болезнь'), stem(u'заболевание')]
+        self.tags['disease'] = [stem(u'болезнь'), stem(u'заболевание'), stem(u'заболевания')]
 
         # Состав
         self.tags['description'] = [stem(u'состав'), stem(u'капсулы'), stem(u'раствор'), stem(u'экстракт'), stem(u'флаконы'), stem(u'таблетки'), stem(u'симптомы')]

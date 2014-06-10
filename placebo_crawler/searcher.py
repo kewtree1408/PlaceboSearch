@@ -43,6 +43,7 @@ logger.addHandler(fh)
 
 morph = pymorphy2.MorphAnalyzer()
 
+global_replace = ''
 
 import cProfile
 def profile(func):
@@ -247,11 +248,15 @@ def get_term_or_synonym(term, ridx=None, synonyms=None):
         if result:
             return result
         else:
-            for s in synonyms[term]:
-                s = morph.parse(unicode(s))[0].normal_form
-                result = ridx.get(s, [])
+            for s in synonyms.get(term, []):
+                s_norm = morph.parse(unicode(s))[0].normal_form
+                result = ridx.get(s_norm, [])
+
                 if result:
+                    global global_replace
+                    global_replace = s
                     break
+
             return result
 
 
@@ -291,7 +296,7 @@ def get_tf_idf(query, ridx, labels=None, synonyms=None):
                     ds.weight += UP_WEIGHT
             ds.weight *= term_tf_idf[t]
             heappush(heap_docstats, (ds.weight, ds))
-            if len(heap_docstats) > 250 and ds.weight < heap_docstats[0][0]:
+            if len(heap_docstats) > 500:
                 break
         # docstats = sorted([docstat for docstat in all_terms_ridx], key=lambda docst: docst.weight)
 
@@ -324,6 +329,7 @@ def get_tf_idf(query, ridx, labels=None, synonyms=None):
     for _, ds in intersection_ds:
         rank[ds.text_id][0] += ds.weight
         rank[ds.text_id][1] += [ds]
+
     for t in q_docstats:
         while q_docstats[t]:
             w, ds = heappop(q_docstats[t])
@@ -474,7 +480,11 @@ def get_lst_snippet(lst_result, db_text, begin, end):
                     'labels': labels,
                     'shorter': snippet_by(text, posids),
                     'title': title}]
-    return snippet
+
+    global global_replace
+    replace = global_replace
+    global_replace = ''
+    return snippet, replace
 
 
 def load_synonyms():
@@ -483,8 +493,9 @@ def load_synonyms():
         for line in file:
             line = line.split('|')
             name = line[0]
+            norm_name = morph.parse(unicode(name))[0].normal_form
             synonyms = line[1].split(',')
-            d[name] = synonyms[:-1]
+            d[norm_name] = [morph.parse(unicode(s))[0].normal_form for s in synonyms[:-1]]
     return d
 
 
@@ -510,25 +521,19 @@ def main():
 
     query = u"печень почки, симптомы; ; : противопоказания,,,"
     synonyms = load_synonyms()
+    for s in synonyms:
+        print s, synonyms[s]
     # Выясняем, насколько наш запрос соответствует документу
     ridx = get_index('rindex.pkl', db_text)
     res = finder(query, ridx, synonyms)
     print res
-    snippets = get_lst_snippet(res, db_text, 0, len(res))
+    snippets, replace = get_lst_snippet(res, db_text, 0, len(res))
     # for snippet in snippets:
     #     for l in snippet['labels']:
     #         print repr(l)
     #     if len(snippet['shorter']) > 300:
     #         import ipdb; ipdb.set_trace()
     #     print len(snippet['shorter'])
-
-
-class Singleton(object):
-    _instances = {}
-    def __new__(class_, *args, **kwargs):
-        if class_ not in class_._instances:
-            class_._instances[class_] = super(Singleton, class_).__new__(class_, *args, **kwargs)
-        return class_._instances[class_]
 
 
 def set_db():
