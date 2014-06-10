@@ -144,6 +144,20 @@ class DiseaseSpider(Spider):
     # Раздел "Алфавитный указатель болезней"
     start_urls = ['http://www.wiki-meds.ru/zabolevaniya-alpha']
 
+
+    def parse_disease_drugs(self, response):
+        #print "drugs"
+        sel = Selector(response)
+        url = response.meta['url']
+        name = response.meta['name']
+        description = response.meta['description']
+        drugs_and_stuff = ''.join([stuff+'\n' for stuff in sel.xpath('//div[@id="printMe"]//div[@class="drugInfoContainer"]/p[1]//text()').extract()])
+        yield DiseaseDescription(   url = url,
+                                    name = name,
+                                    description = description,
+                                    drugs = drugs_and_stuff,
+                                )
+
     def parse_disease(self, response):
         """
         target_url = response.meta['url']
@@ -162,13 +176,22 @@ class DiseaseSpider(Spider):
         temp = ''.join([stuff+'\n' for stuff in sel.xpath('//div[@id="printMe"]//span[@id="info576"]/*[self::p or self::ol or self::ul]//text()').extract()])
         if temp:
             context = html2text(temp)
-            drugs_and_stuff = ''.join([stuff+'\n' for stuff in sel.xpath('//a[@class="rest_data_list"]/text()').extract()])
+            drugs_url = sel.xpath('//div[@id="printMe"]//div[@class="tabsContainer"]/a[2]/@href').extract()[0]
+            request = Request(drugs_url, callback=self.parse_disease_drugs)
+            request.meta['url'] = response.url
+            request.meta['name'] = disease_title
+            request.meta['description'] = context           
+            yield request
+
+
+            ##drugs_and_stuff = ''#.join([stuff+'\n' for stuff in sel.xpath('//a[@class="rest_data_list"]/text()').extract()])
             #time.sleep(5)
-            yield DiseaseDescription(   url = response.url,
-                                        name = disease_title,
-                                        description = context,
-                                        drugs = drugs_and_stuff,
-                                    )
+            ##yield DiseaseDescription(   url = response.url,
+                                        ##name = disease_title,
+                                        ##description = context,
+                                        ##drugs = drugs_and_stuff,
+                                    ##)
+
 
     def parse_page(self, response):
         sel = Selector(response)
