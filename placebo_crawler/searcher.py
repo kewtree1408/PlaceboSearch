@@ -29,6 +29,7 @@ from bson.objectid import ObjectId
 
 from pprint import pprint
 from math import log, sqrt
+import codecs
 
 # rus_stemmer = RussianStemmer()
 
@@ -238,8 +239,24 @@ def get_term_tf_idf(terms_q):
     return t_w
 
 
+def get_term_or_synonym(term, ridx=None, synonyms=None):
+    if not synonyms:
+        return ridx.get(term, [])
+    else:
+        result = ridx.get(term, [])
+        if result:
+            return result
+        else:
+            for s in synonyms[term]:
+                s = morph.parse(unicode(s))[0].normal_form
+                result = ridx.get(s, [])
+                if result:
+                    break
+            return result
+
+
 @profile
-def get_tf_idf(query, ridx, labels=None):
+def get_tf_idf(query, ridx, labels=None, synonyms=None):
     """
     Возвращает список из списков: [
         [tf-idx, [DocStat2_11, DocStat2_21, DocStat2_31, ...]],
@@ -251,7 +268,7 @@ def get_tf_idf(query, ridx, labels=None):
     labels = [] if labels is None else list(labels)
     terms_q = dict(get_terms(get_tokens(query)))
     q_docstats = dict()
-    N = sum([len(ridx.get(t, [])) for t in terms_q])
+    N = sum([len(get_term_or_synonym(t, ridx, synonyms)) for t in terms_q])
     print N
     # схема tf-idf для терминов
     term_tf_idf = get_term_tf_idf(terms_q)
@@ -261,7 +278,7 @@ def get_tf_idf(query, ridx, labels=None):
     for t in terms_q:
         # куча документов
         heap_docstats = []
-        all_terms_ridx = ridx.get(t, [])
+        all_terms_ridx = get_term_or_synonym(t, ridx, synonyms)
         df = len(all_terms_ridx)
         idf = log(1.0*N/df) if df != 0 else 0
         for ds in all_terms_ridx:
@@ -342,10 +359,10 @@ def get_similarity(q, idx, tf_idf):
     return sorted(rank_lm, key=lambda ds: ds.weight)
 
 
-def finder(q, ridx=None):
+def finder(q, ridx=None, synonyms=None):
     query, labels = get_tags(q)
     if ridx:
-        return get_tf_idf(query, ridx, labels)
+        return get_tf_idf(query, ridx, labels, synonyms)
     return []
 
     # пока не понятно, убираем или оставляем похожесть и как ее учитывать?
@@ -459,6 +476,18 @@ def get_lst_snippet(lst_result, db_text, begin, end):
                     'title': title}]
     return snippet
 
+
+def load_synonyms():
+    d = {}
+    with codecs.open('drug_synonyms_dictionary.txt', encoding='utf8', mode='r') as file:
+        for line in file:
+            line = line.split('|')
+            name = line[0]
+            synonyms = line[1].split(',')
+            d[name] = synonyms[:-1]
+    return d
+
+
 # @profile
 def main():
     """
@@ -480,9 +509,10 @@ def main():
     # db_text.ensure_index('snippet')
 
     query = u"печень почки, симптомы; ; : противопоказания,,,"
+    synonyms = load_synonyms()
     # Выясняем, насколько наш запрос соответствует документу
     ridx = get_index('rindex.pkl', db_text)
-    res = finder(query, ridx)
+    res = finder(query, ridx, synonyms)
     print res
     snippets = get_lst_snippet(res, db_text, 0, len(res))
     # for snippet in snippets:
